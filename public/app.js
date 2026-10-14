@@ -10212,7 +10212,7 @@ function PeopleView(_ref50) {
       for (let i = step; step > 0 ? i <= diff : i >= diff; i += step) {
         copies.push(stamp({
           ...source,
-          id: "task_" + ts + "_" + Math.abs(i) + "_" + Math.random().toString(36).slice(2, 5),
+          id: genTaskId([...all, ...copies]),
           day: addDays(source.day, i),
           person: person.name
         }));
@@ -10227,7 +10227,7 @@ function PeopleView(_ref50) {
     if (copy) {
       const nt = stamp({
         ...source,
-        id: "task_" + ts + "_" + Math.random().toString(36).slice(2, 7),
+        id: genTaskId(all),
         day,
         person: person.name
       });
@@ -12744,9 +12744,401 @@ function AnalyticsView(_ref70) {
     }
   }, "\u0411\u043E\u043B\u044C\u0448\u043E\u0435 \u03C3 \u2014 \u043D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u044D\u0442\u0430\u043F\u0430. \u0421\u0442\u043E\u0438\u0442 \u043F\u043E\u0441\u043C\u043E\u0442\u0440\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0440\u0438\u0438 \u0442\u044F\u043D\u0443\u0442 \u0432\u0432\u0435\u0440\u0445."))));
 }
-function ChangelogModal(_ref73) {
-  let entries = _ref73.entries,
-    onClose = _ref73.onClose;
+const AUDIT_ACTION_LABELS = {
+  create: "Создано",
+  update: "Изменено",
+  assign: "Изменён исполнитель",
+  reschedule: "Перенесено",
+  cancel: "Отменено",
+  restore: "Восстановлено",
+  delete: "Удалено"
+};
+const AUDIT_ENTITY_LABELS = {
+  project: "Проект",
+  series: "Серия",
+  task: "Смена",
+  person: "Сотрудник",
+  role: "Роль",
+  stage: "Этап",
+  stageGroup: "Группа этапов",
+  holiday: "Выходной",
+  achievement: "Достижение",
+  absence: "Отсутствие",
+  settings: "Настройка",
+  user: "Пользователь",
+  userProject: "Доступ к проекту"
+};
+const AUDIT_FIELD_LABELS = {
+  name: "Название",
+  label: "Название",
+  title: "Название",
+  person: "Исполнитель",
+  status: "Этап",
+  day: "Дата",
+  from: "Начало",
+  to: "Окончание",
+  project_id: "Проект",
+  series_id: "Серия",
+  cancelled: "Отмена",
+  deleted: "Удаление",
+  role: "Роль",
+  can_view: "Просмотр",
+  can_edit: "Редактирование",
+  date: "Дата",
+  edit_start: "Начало монтажа",
+  pre_otk_date: "ПредОТК",
+  otk_date: "ОТК",
+  send_date: "Отправка",
+  air_date: "Эфир",
+  manual_status: "Статус серии",
+  managers: "Ответственные",
+  note: "Заметка",
+  notes: "Заметки"
+};
+function auditValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (value === true) return "да";
+  if (value === false) return "нет";
+  if (Array.isArray(value)) return value.length ? value.map(v => typeof v === "object" ? v.name || v.label || v.uid || JSON.stringify(v) : String(v)).join(", ") : "—";
+  if (typeof value === "object") {
+    const text = JSON.stringify(value);
+    return text.length > 140 ? text.slice(0, 140) + "…" : text;
+  }
+  return String(value);
+}
+function auditTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value || "") : date.toLocaleString("ru-RU", {
+    dateStyle: "short",
+    timeStyle: "medium"
+  });
+}
+function HistoryView(_ref73) {
+  let data = _ref73.data;
+  const _useState145 = useState({
+      projectId: "",
+      actorUserId: "",
+      action: "",
+      from: "",
+      to: ""
+    }),
+    _useState146 = _slicedToArray(_useState145, 2),
+    filters = _useState146[0],
+    setFilters = _useState146[1];
+  const _useState147 = useState(1),
+    _useState148 = _slicedToArray(_useState147, 2),
+    page = _useState148[0],
+    setPage = _useState148[1];
+  const _useState149 = useState({
+      events: [],
+      actors: [],
+      page: 1,
+      total: 0,
+      totalPages: 1
+    }),
+    _useState150 = _slicedToArray(_useState149, 2),
+    result = _useState150[0],
+    setResult = _useState150[1];
+  const _useState151 = useState(true),
+    _useState152 = _slicedToArray(_useState151, 2),
+    loading = _useState152[0],
+    setLoading = _useState152[1];
+  const _useState153 = useState(""),
+    _useState154 = _slicedToArray(_useState153, 2),
+    error = _useState154[0],
+    setError = _useState154[1];
+  const _useState155 = useState(0),
+    _useState156 = _slicedToArray(_useState155, 2),
+    refreshKey = _useState156[0],
+    setRefreshKey = _useState156[1];
+  useEffect(() => {
+    let active = true;
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: "50"
+    });
+    Object.entries(filters).forEach(_ref74 => {
+      let _ref75 = _slicedToArray(_ref74, 2),
+        key = _ref75[0],
+        value = _ref75[1];
+      if (value) query.set(key, value);
+    });
+    setLoading(true);
+    setError("");
+    fetch("/api/audit/events?" + query.toString(), {
+      credentials: "include",
+      cache: "no-store"
+    }).then(async response => {
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Не удалось загрузить историю");
+      return body;
+    }).then(body => {
+      if (active) setResult(body);
+    }).catch(err => {
+      if (active) setError(err.message);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [page, filters.projectId, filters.actorUserId, filters.action, filters.from, filters.to, refreshKey]);
+  function change(key, value) {
+    setFilters(current => ({
+      ...current,
+      [key]: value
+    }));
+    setPage(1);
+  }
+  const selectStyle = {
+    background: "rgba(8,13,26,.74)",
+    border: "1px solid rgba(148,163,184,.24)",
+    color: "#eef4ff",
+    borderRadius: 11,
+    padding: "8px 10px",
+    fontSize: 12,
+    minWidth: 150
+  };
+  const dateStyle = {
+    ...selectStyle,
+    minWidth: 138,
+    colorScheme: "dark"
+  };
+  return React.createElement("div", {
+    style: {
+      maxWidth: 1240,
+      margin: "0 auto"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      gap: 12,
+      marginBottom: 16,
+      flexWrap: "wrap"
+    }
+  }, React.createElement("div", null, React.createElement("h2", {
+    style: {
+      margin: "0 0 5px",
+      fontSize: 24
+    }
+  }, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F"), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#8ea2bb"
+    }
+  }, "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F, \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u043C \xB7 \u0432\u0441\u0435\u0433\u043E ", result.total)), React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
+    onClick: () => setRefreshKey(value => value + 1)
+  }, "\u21BB \u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C")), React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap",
+      padding: 12,
+      marginBottom: 14,
+      background: "rgba(15,23,42,.58)",
+      border: "1px solid rgba(148,163,184,.18)",
+      borderRadius: 16
+    }
+  }, React.createElement("select", {
+    "aria-label": "\u041F\u0440\u043E\u0435\u043A\u0442",
+    value: filters.projectId,
+    onChange: e => change("projectId", e.target.value),
+    style: selectStyle
+  }, React.createElement("option", {
+    value: ""
+  }, "\u0412\u0441\u0435 \u043F\u0440\u043E\u0435\u043A\u0442\u044B"), (data.projects || []).map(project => React.createElement("option", {
+    key: project.id,
+    value: project.id
+  }, project.name))), React.createElement("select", {
+    "aria-label": "\u0421\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A",
+    value: filters.actorUserId,
+    onChange: e => change("actorUserId", e.target.value),
+    style: selectStyle
+  }, React.createElement("option", {
+    value: ""
+  }, "\u0412\u0441\u0435 \u0430\u0432\u0442\u043E\u0440\u044B"), (result.actors || []).map(actor => React.createElement("option", {
+    key: String(actor.id) + actor.name,
+    value: actor.id
+  }, actor.name))), React.createElement("select", {
+    "aria-label": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435",
+    value: filters.action,
+    onChange: e => change("action", e.target.value),
+    style: selectStyle
+  }, React.createElement("option", {
+    value: ""
+  }, "\u0412\u0441\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F"), Object.entries(AUDIT_ACTION_LABELS).map(_ref76 => {
+    let _ref77 = _slicedToArray(_ref76, 2),
+      id = _ref77[0],
+      label = _ref77[1];
+    return React.createElement("option", {
+      key: id,
+      value: id
+    }, label);
+  })), React.createElement("input", {
+    "aria-label": "\u041F\u0435\u0440\u0438\u043E\u0434 \u0441",
+    title: "\u041F\u0435\u0440\u0438\u043E\u0434 \u0441",
+    type: "date",
+    value: filters.from,
+    onChange: e => change("from", e.target.value),
+    style: dateStyle
+  }), React.createElement("input", {
+    "aria-label": "\u041F\u0435\u0440\u0438\u043E\u0434 \u043F\u043E",
+    title: "\u041F\u0435\u0440\u0438\u043E\u0434 \u043F\u043E",
+    type: "date",
+    value: filters.to,
+    onChange: e => change("to", e.target.value),
+    style: dateStyle
+  }), Object.values(filters).some(Boolean) && React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
+    onClick: () => {
+      setFilters({
+        projectId: "",
+        actorUserId: "",
+        action: "",
+        from: "",
+        to: ""
+      });
+      setPage(1);
+    }
+  }, "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C")), error && React.createElement("div", {
+    role: "alert",
+    style: {
+      padding: 14,
+      border: "1px solid #b45309",
+      borderRadius: 12,
+      color: "#fde68a",
+      background: "#422006"
+    }
+  }, error), loading ? React.createElement("div", {
+    style: {
+      padding: 30,
+      textAlign: "center",
+      color: "#8ea2bb"
+    }
+  }, "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044E \u0438\u0441\u0442\u043E\u0440\u0438\u044E\u2026") : !result.events.length ? React.createElement("div", {
+    style: {
+      padding: 36,
+      textAlign: "center",
+      color: "#64748b",
+      border: "1px dashed #334155",
+      borderRadius: 14
+    }
+  }, "\u041F\u043E \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u043C \u0444\u0438\u043B\u044C\u0442\u0440\u0430\u043C \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u043D\u0435\u0442") : React.createElement("div", {
+    style: {
+      display: "grid",
+      gap: 8
+    }
+  }, result.events.map(event => {
+    var _event$details;
+    return React.createElement("div", {
+      key: event.id,
+      style: {
+        display: "grid",
+        gridTemplateColumns: "145px minmax(140px,190px) minmax(180px,1fr) minmax(280px,2fr)",
+        gap: 14,
+        alignItems: "start",
+        padding: "13px 15px",
+        background: "rgba(15,23,42,.58)",
+        border: "1px solid rgba(148,163,184,.16)",
+        borderRadius: 14
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#8ea2bb",
+        lineHeight: 1.5
+      }
+    }, auditTime(event.occurredAt), React.createElement("div", {
+      style: {
+        color: event.source === "user" ? "#64748b" : "#c084fc"
+      }
+    }, event.source === "user" ? "пользователь" : event.source)), React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#dbeafe"
+      }
+    }, event.userName || "Система"), React.createElement("div", null, React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: event.action === "delete" ? "#fca5a5" : event.action === "create" ? "#86efac" : "#93c5fd"
+      }
+    }, AUDIT_ACTION_LABELS[event.action] || event.action), React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#cbd5e1",
+        marginTop: 3
+      }
+    }, AUDIT_ENTITY_LABELS[event.entity] || event.entity, (_event$details = event.details) !== null && _event$details !== void 0 && _event$details.label ? ": " + event.details.label : ""), (event.projectName || event.seriesName) && React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#64748b",
+        marginTop: 4
+      }
+    }, [event.projectName, event.seriesName].filter(Boolean).join(" · "))), React.createElement("div", {
+      style: {
+        fontSize: 11,
+        lineHeight: 1.55,
+        color: "#94a3b8"
+      }
+    }, (event.changes || []).slice(0, 8).map((change, index) => React.createElement("div", {
+      key: change.field + index,
+      style: {
+        marginBottom: 2
+      }
+    }, React.createElement("span", {
+      style: {
+        color: "#cbd5e1",
+        fontWeight: 700
+      }
+    }, AUDIT_FIELD_LABELS[change.field] || change.field, ": "), React.createElement("span", null, auditValue(change.before)), React.createElement("span", {
+      style: {
+        color: "#60a5fa",
+        padding: "0 5px"
+      }
+    }, "\u2192"), React.createElement("span", {
+      style: {
+        color: "#e2e8f0"
+      }
+    }, auditValue(change.after)))), (event.changes || []).length > 8 && React.createElement("div", null, "\u0438 \u0435\u0449\u0451 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439: ", event.changes.length - 8), event.reason && React.createElement("div", {
+      style: {
+        marginTop: 5,
+        color: "#fcd34d"
+      }
+    }, "\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ", event.reason)));
+  })), React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 14
+    }
+  }, React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
+    disabled: page <= 1 || loading,
+    onClick: () => setPage(value => Math.max(1, value - 1))
+  }, "\u2190 \u041D\u043E\u0432\u0435\u0435"), React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#64748b"
+    }
+  }, "\u0421\u0442\u0440\u0430\u043D\u0438\u0446\u0430 ", result.page || page, " \u0438\u0437 ", result.totalPages || 1), React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
+    disabled: page >= (result.totalPages || 1) || loading,
+    onClick: () => setPage(value => value + 1)
+  }, "\u0421\u0442\u0430\u0440\u0435\u0435 \u2192")));
+}
+function ChangelogModal(_ref78) {
+  let entries = _ref78.entries,
+    onClose = _ref78.onClose;
   function fmtTs(ts) {
     const d = new Date(ts);
     const pad = n => String(n).padStart(2, "0");
@@ -12803,21 +13195,21 @@ function ChangelogModal(_ref73) {
     onClick: onClose
   }, "\u0417\u0430\u043A\u0440\u044B\u0442\u044C")));
 }
-function DayShiftsModal(_ref74) {
-  let data = _ref74.data,
-    onClose = _ref74.onClose;
+function DayShiftsModal(_ref79) {
+  let data = _ref79.data,
+    onClose = _ref79.onClose;
   const _useContext1 = useContext(StagesCtx),
     stageMap = _useContext1.stageMap;
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const _useState145 = useState(formatDate(tomorrow)),
-    _useState146 = _slicedToArray(_useState145, 2),
-    targetDay = _useState146[0],
-    setTargetDay = _useState146[1];
-  const _useState147 = useState(false),
-    _useState148 = _slicedToArray(_useState147, 2),
-    copied = _useState148[0],
-    setCopied = _useState148[1];
+  const _useState157 = useState(formatDate(tomorrow)),
+    _useState158 = _slicedToArray(_useState157, 2),
+    targetDay = _useState158[0],
+    setTargetDay = _useState158[1];
+  const _useState159 = useState(false),
+    _useState160 = _slicedToArray(_useState159, 2),
+    copied = _useState160[0],
+    setCopied = _useState160[1];
   const shifts = useMemo(() => {
     const tasks = data.tasks.filter(t => t.day === targetDay && t.person).sort((a, b) => a.from - b.from);
     const byPerson = {};
@@ -12825,16 +13217,16 @@ function DayShiftsModal(_ref74) {
       if (!byPerson[t.person]) byPerson[t.person] = [];
       byPerson[t.person].push(t);
     });
-    return Object.entries(byPerson).sort((_ref75, _ref76) => {
-      let _ref77 = _slicedToArray(_ref75, 1),
-        a = _ref77[0];
-      let _ref78 = _slicedToArray(_ref76, 1),
-        b = _ref78[0];
+    return Object.entries(byPerson).sort((_ref80, _ref81) => {
+      let _ref82 = _slicedToArray(_ref80, 1),
+        a = _ref82[0];
+      let _ref83 = _slicedToArray(_ref81, 1),
+        b = _ref83[0];
       return a.localeCompare(b);
-    }).map(_ref79 => {
-      let _ref80 = _slicedToArray(_ref79, 2),
-        person = _ref80[0],
-        tasks = _ref80[1];
+    }).map(_ref84 => {
+      let _ref85 = _slicedToArray(_ref84, 2),
+        person = _ref85[0],
+        tasks = _ref85[1];
       return {
         person,
         tasks
@@ -12849,9 +13241,9 @@ function DayShiftsModal(_ref74) {
       s += "Смен нет\n";
       return s;
     }
-    shifts.forEach(_ref81 => {
-      let person = _ref81.person,
-        tasks = _ref81.tasks;
+    shifts.forEach(_ref86 => {
+      let person = _ref86.person,
+        tasks = _ref86.tasks;
       const totalH = tasks.reduce((acc, t) => (Number(t.to) || 0) - (Number(t.from) || 0) + acc, 0);
       s += `👤 ${person}  (${totalH}ч)\n`;
       tasks.forEach(t => {
@@ -12915,10 +13307,10 @@ function DayShiftsModal(_ref74) {
       flexDirection: "column",
       gap: 16
     }
-  }, shifts.map(_ref82 => {
+  }, shifts.map(_ref87 => {
     var _pInfo$roles;
-    let person = _ref82.person,
-      tasks = _ref82.tasks;
+    let person = _ref87.person,
+      tasks = _ref87.tasks;
     const totalH = tasks.reduce((acc, t) => (Number(t.to) || 0) - (Number(t.from) || 0) + acc, 0);
     const pInfo = data.people.find(p => p.name === person);
     const roleId = pInfo === null || pInfo === void 0 || (_pInfo$roles = pInfo.roles) === null || _pInfo$roles === void 0 ? void 0 : _pInfo$roles[0];
@@ -13044,43 +13436,43 @@ function DayShiftsModal(_ref74) {
     }));
   })));
 }
-function PersonCard(_ref83) {
+function PersonCard(_ref88) {
   var _person$roles, _roleMap$person$roles, _Object$entries$sort$;
-  let personId = _ref83.personId,
-    data = _ref83.data,
-    onBack = _ref83.onBack,
-    onUpdatePeople = _ref83.onUpdatePeople,
-    canEditBirthday = _ref83.canEditBirthday,
-    canEditAbsences = _ref83.canEditAbsences;
+  let personId = _ref88.personId,
+    data = _ref88.data,
+    onBack = _ref88.onBack,
+    onUpdatePeople = _ref88.onUpdatePeople,
+    canEditBirthday = _ref88.canEditBirthday,
+    canEditAbsences = _ref88.canEditAbsences;
   const _useContext10 = useContext(StagesCtx),
     stageMap = _useContext10.stageMap;
-  const _useState149 = useState("load"),
-    _useState150 = _slicedToArray(_useState149, 2),
-    tab = _useState150[0],
-    setTab = _useState150[1];
+  const _useState161 = useState("load"),
+    _useState162 = _slicedToArray(_useState161, 2),
+    tab = _useState162[0],
+    setTab = _useState162[1];
   const person = useMemo(() => data.people.find(p => p.id === personId) || data.people.find(p => p.name === personId), [data.people, personId]);
   const personName = (person === null || person === void 0 ? void 0 : person.name) || personId;
-  const _useState151 = useState(false),
-    _useState152 = _slicedToArray(_useState151, 2),
-    birthdayEdit = _useState152[0],
-    setBirthdayEdit = _useState152[1];
-  const _useState153 = useState((person === null || person === void 0 ? void 0 : person.birthday) || ""),
-    _useState154 = _slicedToArray(_useState153, 2),
-    birthdayDraft = _useState154[0],
-    setBirthdayDraft = _useState154[1];
-  const _useState155 = useState({
+  const _useState163 = useState(false),
+    _useState164 = _slicedToArray(_useState163, 2),
+    birthdayEdit = _useState164[0],
+    setBirthdayEdit = _useState164[1];
+  const _useState165 = useState((person === null || person === void 0 ? void 0 : person.birthday) || ""),
+    _useState166 = _slicedToArray(_useState165, 2),
+    birthdayDraft = _useState166[0],
+    setBirthdayDraft = _useState166[1];
+  const _useState167 = useState({
       type: "dayoff",
       startDay: formatDate(new Date()),
       endDay: formatDate(new Date()),
       note: ""
     }),
-    _useState156 = _slicedToArray(_useState155, 2),
-    absenceDraft = _useState156[0],
-    setAbsenceDraft = _useState156[1];
-  const _useState157 = useState(0),
-    _useState158 = _slicedToArray(_useState157, 2),
-    loadMonthOffset = _useState158[0],
-    setLoadMonthOffset = _useState158[1];
+    _useState168 = _slicedToArray(_useState167, 2),
+    absenceDraft = _useState168[0],
+    setAbsenceDraft = _useState168[1];
+  const _useState169 = useState(0),
+    _useState170 = _slicedToArray(_useState169, 2),
+    loadMonthOffset = _useState170[0],
+    setLoadMonthOffset = _useState170[1];
   useEffect(() => setBirthdayDraft((person === null || person === void 0 ? void 0 : person.birthday) || ""), [person === null || person === void 0 ? void 0 : person.birthday]);
   const roleMap = useMemo(() => Object.fromEntries(data.roles.map(r => [r.id, r])), [data.roles]);
   const todayStr = formatDate(new Date());
@@ -13778,16 +14170,16 @@ function PersonCard(_ref83) {
       if (!byDay[t.day]) byDay[t.day] = [];
       byDay[t.day].push(t);
     });
-    return Object.entries(byDay).sort((_ref84, _ref85) => {
-      let _ref86 = _slicedToArray(_ref84, 1),
-        a = _ref86[0];
-      let _ref87 = _slicedToArray(_ref85, 1),
-        b = _ref87[0];
+    return Object.entries(byDay).sort((_ref89, _ref90) => {
+      let _ref91 = _slicedToArray(_ref89, 1),
+        a = _ref91[0];
+      let _ref92 = _slicedToArray(_ref90, 1),
+        b = _ref92[0];
       return daySort(a).localeCompare(daySort(b));
-    }).map(_ref88 => {
-      let _ref89 = _slicedToArray(_ref88, 2),
-        day = _ref89[0],
-        dt = _ref89[1];
+    }).map(_ref93 => {
+      let _ref94 = _slicedToArray(_ref93, 2),
+        day = _ref94[0],
+        dt = _ref94[1];
       return React.createElement("div", {
         key: day,
         style: {
@@ -13902,9 +14294,9 @@ function PersonCard(_ref83) {
   }, {
     l: "ПЛАН Ч/НЕД · 12 НЕД",
     v: avgHrsW.toFixed(1)
-  }].map(_ref90 => {
-    let l = _ref90.l,
-      v = _ref90.v;
+  }].map(_ref95 => {
+    let l = _ref95.l,
+      v = _ref95.v;
     return React.createElement("div", {
       key: l,
       style: {
@@ -14047,11 +14439,11 @@ function PersonCard(_ref83) {
     }
   }, "\u0410\u0447\u0438\u0432\u043A\u0438 \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u043F\u043E \u043C\u0435\u0440\u0435 \u0438\u0441\u0442\u043E\u0440\u0438\u0438"))));
 }
-function TodayView(_ref91) {
-  let data = _ref91.data,
-    conflictDetails = _ref91.conflictDetails,
-    onNavigateConflicts = _ref91.onNavigateConflicts,
-    canEdit = _ref91.canEdit;
+function TodayView(_ref96) {
+  let data = _ref96.data,
+    conflictDetails = _ref96.conflictDetails,
+    onNavigateConflicts = _ref96.onNavigateConflicts,
+    canEdit = _ref96.canEdit;
   const _useContext11 = useContext(StagesCtx),
     stageMap = _useContext11.stageMap;
   const today = useMemo(() => {
@@ -14119,11 +14511,11 @@ function TodayView(_ref91) {
     const diff = Math.round((d - today) / 86400000);
     return diff === 0 ? "\u0441\u0435\u0433\u043e\u0434\u043d\u044f" : diff === 1 ? "\u0437\u0430\u0432\u0442\u0440\u0430" : `\u0447\u0435\u0440\u0435\u0437 ${diff} \u0434\u043d.`;
   }
-  function Block(_ref92) {
-    let title = _ref92.title,
-      count = _ref92.count,
-      color = _ref92.color,
-      children = _ref92.children;
+  function Block(_ref97) {
+    let title = _ref97.title,
+      count = _ref97.count,
+      color = _ref97.color,
+      children = _ref97.children;
     return React.createElement("div", {
       style: {
         background: "rgba(30,41,59,.72)",
@@ -14159,8 +14551,8 @@ function TodayView(_ref91) {
       }
     }, children));
   }
-  function TasksBlock(_ref93) {
-    let tasks = _ref93.tasks;
+  function TasksBlock(_ref98) {
+    let tasks = _ref98.tasks;
     const byProj = groupByProj(tasks);
     if (!byProj.length) return React.createElement("div", {
       style: {
@@ -14168,10 +14560,10 @@ function TodayView(_ref91) {
         fontSize: 14
       }
     }, "\u0421\u043c\u0435\u043d \u043d\u0435\u0442");
-    return byProj.map(_ref94 => {
-      let _ref95 = _slicedToArray(_ref94, 2),
-        pid = _ref95[0],
-        pts = _ref95[1];
+    return byProj.map(_ref99 => {
+      let _ref100 = _slicedToArray(_ref99, 2),
+        pid = _ref100[0],
+        pts = _ref100[1];
       const proj = data.projects.find(p => p.id === pid);
       const grouped = groupTodayTasks(pts);
       return React.createElement("div", {
@@ -14394,31 +14786,31 @@ function TodayView(_ref91) {
     tasks: datTasks
   })))));
 }
-function SeriesCard(_ref96) {
-  let seriesId = _ref96.seriesId,
-    data = _ref96.data,
-    onBatchUpdate = _ref96.onBatchUpdate;
+function SeriesCard(_ref101) {
+  let seriesId = _ref101.seriesId,
+    data = _ref101.data,
+    onBatchUpdate = _ref101.onBatchUpdate;
   const holidays = useContext(HolidaysCtx);
-  const _useState159 = useState("general"),
-    _useState160 = _slicedToArray(_useState159, 2),
-    tab = _useState160[0],
-    setTab = _useState160[1];
-  const _useState161 = useState(null),
-    _useState162 = _slicedToArray(_useState161, 2),
-    newCLForm = _useState162[0],
-    setNewCLForm = _useState162[1];
-  const _useState163 = useState(null),
-    _useState164 = _slicedToArray(_useState163, 2),
-    editCLId = _useState164[0],
-    setEditCLId = _useState164[1];
-  const _useState165 = useState(""),
-    _useState166 = _slicedToArray(_useState165, 2),
-    editCLName = _useState166[0],
-    setEditCLName = _useState166[1];
-  const _useState167 = useState({}),
-    _useState168 = _slicedToArray(_useState167, 2),
-    openCmts = _useState168[0],
-    setOpenCmts = _useState168[1];
+  const _useState171 = useState("general"),
+    _useState172 = _slicedToArray(_useState171, 2),
+    tab = _useState172[0],
+    setTab = _useState172[1];
+  const _useState173 = useState(null),
+    _useState174 = _slicedToArray(_useState173, 2),
+    newCLForm = _useState174[0],
+    setNewCLForm = _useState174[1];
+  const _useState175 = useState(null),
+    _useState176 = _slicedToArray(_useState175, 2),
+    editCLId = _useState176[0],
+    setEditCLId = _useState176[1];
+  const _useState177 = useState(""),
+    _useState178 = _slicedToArray(_useState177, 2),
+    editCLName = _useState178[0],
+    setEditCLName = _useState178[1];
+  const _useState179 = useState({}),
+    _useState180 = _slicedToArray(_useState179, 2),
+    openCmts = _useState180[0],
+    setOpenCmts = _useState180[1];
   const ser = (data.series || []).find(s => s.id === seriesId);
   const proj = ser ? data.projects.find(p => p.id === ser.projectId) : null;
   if (!ser || !proj) return React.createElement("div", {
@@ -14585,9 +14977,9 @@ function SeriesCard(_ref96) {
       overflow: "hidden",
       width: "fit-content"
     }
-  }, TABS.map(_ref97 => {
-    let id = _ref97.id,
-      label = _ref97.label;
+  }, TABS.map(_ref102 => {
+    let id = _ref102.id,
+      label = _ref102.label;
     return React.createElement("button", {
       key: id,
       onClick: () => setTab(id),
@@ -15244,30 +15636,30 @@ function SeriesCard(_ref96) {
     onClick: createChecklist
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"))));
 }
-function ProjectCard(_ref98) {
-  let projectId = _ref98.projectId,
-    data = _ref98.data,
-    onUpdate = _ref98.onUpdate,
-    onBatchUpdate = _ref98.onBatchUpdate,
-    onBack = _ref98.onBack,
-    onSeriesSelect = _ref98.onSeriesSelect,
-    onDelete = _ref98.onDelete,
-    onLog = _ref98.onLog,
-    canDeleteStructure = _ref98.canDeleteStructure,
-    canEditProject = _ref98.canEditProject,
-    canManageProjectAssignments = _ref98.canManageProjectAssignments;
+function ProjectCard(_ref103) {
+  let projectId = _ref103.projectId,
+    data = _ref103.data,
+    onUpdate = _ref103.onUpdate,
+    onBatchUpdate = _ref103.onBatchUpdate,
+    onBack = _ref103.onBack,
+    onSeriesSelect = _ref103.onSeriesSelect,
+    onDelete = _ref103.onDelete,
+    onLog = _ref103.onLog,
+    canDeleteStructure = _ref103.canDeleteStructure,
+    canEditProject = _ref103.canEditProject,
+    canManageProjectAssignments = _ref103.canManageProjectAssignments;
   const _useContext12 = useContext(StagesCtx),
     stages = _useContext12.sorted,
     stageGroups = _useContext12.stageGroups,
     groupMap = _useContext12.groupMap;
-  const _useState169 = useState("general"),
-    _useState170 = _slicedToArray(_useState169, 2),
-    tab = _useState170[0],
-    setTab = _useState170[1];
-  const _useState171 = useState(null),
-    _useState172 = _slicedToArray(_useState171, 2),
-    editSeries = _useState172[0],
-    setEditSeries = _useState172[1];
+  const _useState181 = useState("general"),
+    _useState182 = _slicedToArray(_useState181, 2),
+    tab = _useState182[0],
+    setTab = _useState182[1];
+  const _useState183 = useState(null),
+    _useState184 = _slicedToArray(_useState183, 2),
+    editSeries = _useState184[0],
+    setEditSeries = _useState184[1];
   const kppDragRef = useRef(null);
   const proj = data.projects.find(p => p.id === projectId);
   if (!proj) return React.createElement("div", {
@@ -15464,9 +15856,9 @@ function ProjectCard(_ref98) {
       overflow: "hidden",
       width: "fit-content"
     }
-  }, TABS.map(_ref99 => {
-    let id = _ref99.id,
-      label = _ref99.label;
+  }, TABS.map(_ref104 => {
+    let id = _ref104.id,
+      label = _ref104.label;
     return React.createElement("button", {
       key: id,
       onClick: () => setTab(id),
@@ -16181,10 +16573,10 @@ function ProjectCard(_ref98) {
       gridTemplateColumns: "1fr 1fr",
       gap: 12
     }
-  }, [["ТИП КОНТЕНТА", "type"], ["ХРОНОМЕТРАЖ", "duration"], ["ПУТЬ НА СЕРВЕРЕ", "serverPath"], ["ПРИНИМАЮЩИЙ ПРОДЮСЕР", "receivingProducer"], ["ТЕЛЕФОН ПР. ПРОДЮСЕРА", "receivingProducerPhone"], ["ТЕЛЕФОН МЕНЕДЖЕРА", "managerPhone"], ["КОЛ-ВО ВЕРСИЙ", "versions"], ["РЕКЛАМНЫЙ ХРОНОМЕТРАЖ", "adRules"], ["РАСПИСАНИЕ ЭФИРА", "airSchedule"], ["СПОСОБ ДОСТАВКИ", "deliveryMethod"]].map(_ref100 => {
-    let _ref101 = _slicedToArray(_ref100, 2),
-      l = _ref101[0],
-      f = _ref101[1];
+  }, [["ТИП КОНТЕНТА", "type"], ["ХРОНОМЕТРАЖ", "duration"], ["ПУТЬ НА СЕРВЕРЕ", "serverPath"], ["ПРИНИМАЮЩИЙ ПРОДЮСЕР", "receivingProducer"], ["ТЕЛЕФОН ПР. ПРОДЮСЕРА", "receivingProducerPhone"], ["ТЕЛЕФОН МЕНЕДЖЕРА", "managerPhone"], ["КОЛ-ВО ВЕРСИЙ", "versions"], ["РЕКЛАМНЫЙ ХРОНОМЕТРАЖ", "adRules"], ["РАСПИСАНИЕ ЭФИРА", "airSchedule"], ["СПОСОБ ДОСТАВКИ", "deliveryMethod"]].map(_ref105 => {
+    let _ref106 = _slicedToArray(_ref105, 2),
+      l = _ref106[0],
+      f = _ref106[1];
     return React.createElement("div", {
       key: f
     }, React.createElement("label", {
@@ -16359,11 +16751,11 @@ function ProjectCard(_ref98) {
       label: "",
       url: ""
     }
-  }].map(_ref102 => {
-    let key = _ref102.key,
-      title = _ref102.title,
-      fields = _ref102.fields,
-      empty = _ref102.empty;
+  }].map(_ref107 => {
+    let key = _ref107.key,
+      title = _ref107.title,
+      fields = _ref107.fields,
+      empty = _ref107.empty;
     const items = dossier[key] || [];
     return React.createElement("div", {
       key: key,
@@ -16405,9 +16797,9 @@ function ProjectCard(_ref98) {
         marginBottom: 8,
         alignItems: "center"
       }
-    }, fields.map(_ref103 => {
-      let k = _ref103.k,
-        ph = _ref103.ph;
+    }, fields.map(_ref108 => {
+      let k = _ref108.k,
+        ph = _ref108.ph;
       return React.createElement("div", {
         key: k,
         style: {
@@ -16471,20 +16863,20 @@ function ProjectCard(_ref98) {
     onClose: () => setEditSeries(null)
   }));
 }
-function CommandPalette(_ref104) {
-  let data = _ref104.data,
-    onClose = _ref104.onClose,
-    onNavigate = _ref104.onNavigate,
-    onSetView = _ref104.onSetView,
-    onSetGanttDay = _ref104.onSetGanttDay;
-  const _useState173 = useState(""),
-    _useState174 = _slicedToArray(_useState173, 2),
-    query = _useState174[0],
-    setQuery = _useState174[1];
-  const _useState175 = useState(0),
-    _useState176 = _slicedToArray(_useState175, 2),
-    selIdx = _useState176[0],
-    setSelIdx = _useState176[1];
+function CommandPalette(_ref109) {
+  let data = _ref109.data,
+    onClose = _ref109.onClose,
+    onNavigate = _ref109.onNavigate,
+    onSetView = _ref109.onSetView,
+    onSetGanttDay = _ref109.onSetGanttDay;
+  const _useState185 = useState(""),
+    _useState186 = _slicedToArray(_useState185, 2),
+    query = _useState186[0],
+    setQuery = _useState186[1];
+  const _useState187 = useState(0),
+    _useState188 = _slicedToArray(_useState187, 2),
+    selIdx = _useState188[0],
+    setSelIdx = _useState188[1];
   const inputRef = useRef(null);
   const listRef = useRef(null);
   useEffect(() => {
@@ -17015,8 +17407,8 @@ async function doLogout() {
   });
   setCsrfToken("");
 }
-function FlipUnit(_ref105) {
-  let digit = _ref105.digit;
+function FlipUnit(_ref110) {
+  let digit = _ref110.digit;
   const _React$useState3 = React.useState(false),
     _React$useState4 = _slicedToArray(_React$useState3, 2),
     rolling = _React$useState4[0],
@@ -17115,9 +17507,9 @@ function FlipClock() {
     digit: s % 10
   }));
 }
-function LoginForm(_ref106) {
-  let onLogin = _ref106.onLogin,
-    error = _ref106.error;
+function LoginForm(_ref111) {
+  let onLogin = _ref111.onLogin,
+    error = _ref111.error;
   const _React$useState7 = React.useState(""),
     _React$useState8 = _slicedToArray(_React$useState7, 2),
     l = _React$useState8[0],
@@ -17223,9 +17615,9 @@ function LoginForm(_ref106) {
     }
   }, "\u0412\u043E\u0439\u0442\u0438")));
 }
-function UsersView(_ref107) {
-  let user = _ref107.user,
-    onUserUpdate = _ref107.onUserUpdate;
+function UsersView(_ref112) {
+  let user = _ref112.user,
+    onUserUpdate = _ref112.onUserUpdate;
   const _React$useState1 = React.useState([]),
     _React$useState10 = _slicedToArray(_React$useState1, 2),
     users = _React$useState10[0],
@@ -17522,10 +17914,10 @@ const MT = {
 };
 function useIsMobile() {
   let maxWidth = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 760;
-  const _useState177 = useState(() => typeof window !== "undefined" ? window.innerWidth <= maxWidth : false),
-    _useState178 = _slicedToArray(_useState177, 2),
-    isMobile = _useState178[0],
-    setIsMobile = _useState178[1];
+  const _useState189 = useState(() => typeof window !== "undefined" ? window.innerWidth <= maxWidth : false),
+    _useState190 = _slicedToArray(_useState189, 2),
+    isMobile = _useState190[0],
+    setIsMobile = _useState190[1];
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
     const onChange = () => setIsMobile(mq.matches);
@@ -17535,22 +17927,22 @@ function useIsMobile() {
   }, [maxWidth]);
   return isMobile;
 }
-function MobilePanel(_ref108) {
-  let children = _ref108.children,
-    style = _ref108.style,
-    onClick = _ref108.onClick;
+function MobilePanel(_ref113) {
+  let children = _ref113.children,
+    style = _ref113.style,
+    onClick = _ref113.onClick;
   return React.createElement("div", {
     className: "ppt-mobile-panel",
     onClick: onClick,
     style: style
   }, children);
 }
-function MobileTopbar(_ref109) {
-  let user = _ref109.user,
-    syncState = _ref109.syncState,
-    onSearch = _ref109.onSearch,
-    onLogout = _ref109.onLogout,
-    onShifts = _ref109.onShifts;
+function MobileTopbar(_ref114) {
+  let user = _ref114.user,
+    syncState = _ref114.syncState,
+    onSearch = _ref114.onSearch,
+    onLogout = _ref114.onLogout,
+    onShifts = _ref114.onShifts;
   return React.createElement("div", {
     className: "ppt-mobile-topbar"
   }, React.createElement("div", null, React.createElement("div", {
@@ -17584,11 +17976,11 @@ function MobileTopbar(_ref109) {
     onClick: onLogout
   }, MT.logout)));
 }
-function MobileBottomNav(_ref110) {
-  let tabs = _ref110.tabs,
-    view = _ref110.view,
-    setView = _ref110.setView,
-    navigate = _ref110.navigate;
+function MobileBottomNav(_ref115) {
+  let tabs = _ref115.tabs,
+    view = _ref115.view,
+    setView = _ref115.setView,
+    navigate = _ref115.navigate;
   const allowed = new Set(["today", "calendar", "projects", "people", "conflicts"]);
   const items = tabs.filter(t => allowed.has(t.id)).slice(0, 5);
   const labels = {
@@ -17623,11 +18015,11 @@ function groupMobileTasks(tasks) {
   });
   return Object.values(m).sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0) || String(a.project || "").localeCompare(String(b.project || "")) || String(a.series || "").localeCompare(String(b.series || "")));
 }
-function MobileTaskGroup(_ref111) {
-  let group = _ref111.group,
-    data = _ref111.data,
-    onOpenProject = _ref111.onOpenProject,
-    onOpenPerson = _ref111.onOpenPerson;
+function MobileTaskGroup(_ref116) {
+  let group = _ref116.group,
+    data = _ref116.data,
+    onOpenProject = _ref116.onOpenProject,
+    onOpenPerson = _ref116.onOpenPerson;
   const proj = (data.projects || []).find(p => p.id === group.project);
   const people = group.people || [];
   return React.createElement("div", {
@@ -17664,11 +18056,11 @@ function MobileTaskGroup(_ref111) {
     }, name);
   }))));
 }
-function MobileTaskRow(_ref112) {
-  let task = _ref112.task,
-    data = _ref112.data,
-    onOpenProject = _ref112.onOpenProject,
-    onOpenPerson = _ref112.onOpenPerson;
+function MobileTaskRow(_ref117) {
+  let task = _ref117.task,
+    data = _ref117.data,
+    onOpenProject = _ref117.onOpenProject,
+    onOpenPerson = _ref117.onOpenPerson;
   return React.createElement(MobileTaskGroup, {
     group: {
       ...task,
@@ -17711,12 +18103,12 @@ function mobileDayInfo(data, day) {
     count: tasks.length + airs.length + milestones.length + bdays.length
   };
 }
-function MobileToday(_ref113) {
-  let data = _ref113.data,
-    conflictDetails = _ref113.conflictDetails,
-    onOpenProject = _ref113.onOpenProject,
-    onOpenPerson = _ref113.onOpenPerson,
-    onConflicts = _ref113.onConflicts;
+function MobileToday(_ref118) {
+  let data = _ref118.data,
+    conflictDetails = _ref118.conflictDetails,
+    onOpenProject = _ref118.onOpenProject,
+    onOpenPerson = _ref118.onOpenPerson,
+    onConflicts = _ref118.onConflicts;
   const todayStr = formatDate(new Date());
   const tomorrowStr = addDays(todayStr, 1);
   const todayTasks = (data.tasks || []).filter(t => !t.deleted && !t.cancelled && t.day === todayStr).sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0));
@@ -17765,20 +18157,20 @@ function MobileToday(_ref113) {
     className: "ppt-mobile-empty"
   }, MT.noShifts)));
 }
-function MobileCalendar(_ref114) {
-  let data = _ref114.data,
-    onOpenProject = _ref114.onOpenProject,
-    onOpenPerson = _ref114.onOpenPerson;
+function MobileCalendar(_ref119) {
+  let data = _ref119.data,
+    onOpenProject = _ref119.onOpenProject,
+    onOpenPerson = _ref119.onOpenPerson;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const _useState179 = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
-    _useState180 = _slicedToArray(_useState179, 2),
-    cursor = _useState180[0],
-    setCursor = _useState180[1];
-  const _useState181 = useState(() => formatDate(today)),
-    _useState182 = _slicedToArray(_useState181, 2),
-    selected = _useState182[0],
-    setSelected = _useState182[1];
+  const _useState191 = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
+    _useState192 = _slicedToArray(_useState191, 2),
+    cursor = _useState192[0],
+    setCursor = _useState192[1];
+  const _useState193 = useState(() => formatDate(today)),
+    _useState194 = _slicedToArray(_useState193, 2),
+    selected = _useState194[0],
+    setSelected = _useState194[1];
   const year = cursor.getFullYear(),
     month = cursor.getMonth();
   const cells = useMemo(() => {
@@ -17844,9 +18236,9 @@ function MobileCalendar(_ref114) {
   }, React.createElement("strong", null, dayLabel(selected)), React.createElement("span", null, selectedInfo.count)), selectedInfo.bdays.map(p => React.createElement("div", {
     key: `b${p.id || p.name}`,
     className: "ppt-mobile-calendar-note birthday"
-  }, MT.birthdayShort, " ", p.name)), selectedInfo.airs.map((_ref115, i) => {
-    let proj = _ref115.proj,
-      ser = _ref115.ser;
+  }, MT.birthdayShort, " ", p.name)), selectedInfo.airs.map((_ref120, i) => {
+    let proj = _ref120.proj,
+      ser = _ref120.ser;
     return React.createElement("div", {
       key: `a${proj.id}${ser.id}${i}`,
       className: "ppt-mobile-calendar-note air",
@@ -17870,9 +18262,9 @@ function MobileCalendar(_ref114) {
     className: "ppt-mobile-empty"
   }, MT.noEvents)));
 }
-function MobileProjects(_ref116) {
-  let data = _ref116.data,
-    onOpenProject = _ref116.onOpenProject;
+function MobileProjects(_ref121) {
+  let data = _ref121.data,
+    onOpenProject = _ref121.onOpenProject;
   const today = formatDate(new Date());
   const projects = (data.projects || []).filter(p => p.status !== MT.archive);
   return React.createElement("div", {
@@ -17897,13 +18289,13 @@ function MobileProjects(_ref116) {
     }, React.createElement("span", null, seriesCount, " ", MT.series), React.createElement("span", null, todayCount, " ", MT.todayLower), React.createElement("span", null, tasks.length, " ", MT.shiftShort)));
   }));
 }
-function MobilePeople(_ref117) {
-  let data = _ref117.data,
-    onOpenPerson = _ref117.onOpenPerson;
-  const _useState183 = useState(""),
-    _useState184 = _slicedToArray(_useState183, 2),
-    q = _useState184[0],
-    setQ = _useState184[1];
+function MobilePeople(_ref122) {
+  let data = _ref122.data,
+    onOpenPerson = _ref122.onOpenPerson;
+  const _useState195 = useState(""),
+    _useState196 = _slicedToArray(_useState195, 2),
+    q = _useState196[0],
+    setQ = _useState196[1];
   const today = formatDate(new Date());
   const people = (data.people || []).filter(p => p.active !== false && !p.deleted).filter(p => !q.trim() || String(p.name || "").toLowerCase().includes(q.trim().toLowerCase()));
   return React.createElement("div", {
@@ -17928,12 +18320,12 @@ function MobilePeople(_ref117) {
     className: "ppt-mobile-empty"
   }, MT.noPeople)));
 }
-function MobileWorkspace(_ref118) {
-  let view = _ref118.view,
-    data = _ref118.data,
-    conflictDetails = _ref118.conflictDetails,
-    setView = _ref118.setView,
-    navigate = _ref118.navigate;
+function MobileWorkspace(_ref123) {
+  let view = _ref123.view,
+    data = _ref123.data,
+    conflictDetails = _ref123.conflictDetails,
+    setView = _ref123.setView,
+    navigate = _ref123.navigate;
   const openProject = id => navigate({
     type: "project",
     id
@@ -17969,47 +18361,47 @@ function MobileWorkspace(_ref118) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState185 = useState(null),
-    _useState186 = _slicedToArray(_useState185, 2),
-    rawData = _useState186[0],
-    setRawData = _useState186[1];
-  const _useState187 = useState("today"),
-    _useState188 = _slicedToArray(_useState187, 2),
-    view = _useState188[0],
-    setView = _useState188[1];
-  const _useState189 = useState(() => parseHash()),
-    _useState190 = _slicedToArray(_useState189, 2),
-    navState = _useState190[0],
-    setNavState = _useState190[1];
-  const _useState191 = useState("ok"),
-    _useState192 = _slicedToArray(_useState191, 2),
-    syncState = _useState192[0],
-    setSyncState = _useState192[1];
-  const _useState193 = useState(""),
-    _useState194 = _slicedToArray(_useState193, 2),
-    syncError = _useState194[0],
-    setSyncError = _useState194[1];
-  const _useState195 = useState(false),
-    _useState196 = _slicedToArray(_useState195, 2),
-    dayShiftsModal = _useState196[0],
-    setDayShiftsModal = _useState196[1];
   const _useState197 = useState(null),
     _useState198 = _slicedToArray(_useState197, 2),
-    ganttDay = _useState198[0],
-    setGanttDay = _useState198[1];
-  const _useState199 = useState(false),
+    rawData = _useState198[0],
+    setRawData = _useState198[1];
+  const _useState199 = useState("today"),
     _useState200 = _slicedToArray(_useState199, 2),
-    cmdPaletteOpen = _useState200[0],
-    setCmdPaletteOpen = _useState200[1];
-  const isMobile = useIsMobile(760);
-  const _useState201 = useState(null),
+    view = _useState200[0],
+    setView = _useState200[1];
+  const _useState201 = useState(() => parseHash()),
     _useState202 = _slicedToArray(_useState201, 2),
-    user = _useState202[0],
-    setUser = _useState202[1];
-  const _useState203 = useState(null),
+    navState = _useState202[0],
+    setNavState = _useState202[1];
+  const _useState203 = useState("ok"),
     _useState204 = _slicedToArray(_useState203, 2),
-    loginError = _useState204[0],
-    setLoginError = _useState204[1];
+    syncState = _useState204[0],
+    setSyncState = _useState204[1];
+  const _useState205 = useState(""),
+    _useState206 = _slicedToArray(_useState205, 2),
+    syncError = _useState206[0],
+    setSyncError = _useState206[1];
+  const _useState207 = useState(false),
+    _useState208 = _slicedToArray(_useState207, 2),
+    dayShiftsModal = _useState208[0],
+    setDayShiftsModal = _useState208[1];
+  const _useState209 = useState(null),
+    _useState210 = _slicedToArray(_useState209, 2),
+    ganttDay = _useState210[0],
+    setGanttDay = _useState210[1];
+  const _useState211 = useState(false),
+    _useState212 = _slicedToArray(_useState211, 2),
+    cmdPaletteOpen = _useState212[0],
+    setCmdPaletteOpen = _useState212[1];
+  const isMobile = useIsMobile(760);
+  const _useState213 = useState(null),
+    _useState214 = _slicedToArray(_useState213, 2),
+    user = _useState214[0],
+    setUser = _useState214[1];
+  const _useState215 = useState(null),
+    _useState216 = _slicedToArray(_useState215, 2),
+    loginError = _useState216[0],
+    setLoginError = _useState216[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
@@ -18233,10 +18625,6 @@ function App() {
   const viewRef = useRef(view);
   viewRef.current = view;
   const pendingLogRef = useRef([]);
-  const _useState205 = useState(false),
-    _useState206 = _slicedToArray(_useState205, 2),
-    changelogOpen = _useState206[0],
-    setChangelogOpen = _useState206[1];
   useEffect(() => {
     const protectUnsaved = event => {
       var _saveQueueRef$current;
@@ -18454,10 +18842,10 @@ function App() {
       const merged = {
         ...d
       };
-      for (const _ref119 of Object.entries(changes)) {
-        var _ref120 = _slicedToArray(_ref119, 2);
-        const key = _ref120[0];
-        const val = _ref120[1];
+      for (const _ref124 of Object.entries(changes)) {
+        var _ref125 = _slicedToArray(_ref124, 2);
+        const key = _ref125[0];
+        const val = _ref125[1];
         if (SOFT_DELETE_KEYS.includes(key) && Array.isArray(val)) {
           const deletedItems = (d[key] || []).filter(x => x.deleted);
           merged[key] = [...val, ...deletedItems.filter(x => !val.some(v => String(v.id) === String(x.id)))];
@@ -18688,6 +19076,10 @@ function App() {
     label: "Аналитика",
     adminManagerOnly: true
   }, {
+    id: "history",
+    label: "История",
+    adminManagerOnly: true
+  }, {
     id: "directory",
     label: "⚙ Настройки",
     adminManagerOnly: true
@@ -18840,8 +19232,11 @@ function App() {
   }[syncState], React.createElement(Btn, {
     variant: "ghost",
     small: true,
-    onClick: () => setChangelogOpen(true)
-  }, "\uD83D\uDCDC"), React.createElement(Btn, {
+    onClick: () => {
+      setView("history");
+      navigate(null);
+    }
+  }, "\uD83D\uDCDC \u0418\u0441\u0442\u043E\u0440\u0438\u044F"), React.createElement(Btn, {
     variant: "ghost",
     small: true,
     onClick: () => setDayShiftsModal(true)
@@ -18965,10 +19360,10 @@ function App() {
       padding: 3,
       boxShadow: "inset 0 1px 0 rgba(255,255,255,.035)"
     }
-  }, TABS.map(_ref121 => {
-    let id = _ref121.id,
-      label = _ref121.label,
-      warn = _ref121.warn;
+  }, TABS.map(_ref126 => {
+    let id = _ref126.id,
+      label = _ref126.label,
+      warn = _ref126.warn;
     return React.createElement("button", {
       key: id,
       onClick: () => {
@@ -19054,6 +19449,8 @@ function App() {
     canDeleteStructure: canDeleteStructure,
     canEditProject: canEditProjectById(navState.id),
     canManageProjectAssignments: canManageProjectAssignments
+  }) : view === "history" && canManage ? React.createElement(HistoryView, {
+    data: data
   }) : isMobile ? React.createElement(MobileWorkspace, {
     view: view,
     data: data,
@@ -19138,7 +19535,7 @@ function App() {
     onUserUpdate: newU => {
       setUser(newU);
     }
-  })), !isMobile && !navState && !["today", "conflicts", "analytics", "directory"].includes(view) && React.createElement("div", {
+  })), !isMobile && !navState && !["today", "conflicts", "analytics", "history", "directory"].includes(view) && React.createElement("div", {
     style: {
       marginTop: 24,
       paddingTop: 14,
@@ -19181,10 +19578,7 @@ function App() {
     view: view,
     setView: setView,
     navigate: navigate
-  })), changelogOpen && React.createElement(ChangelogModal, {
-    entries: data.changelog || [],
-    onClose: () => setChangelogOpen(false)
-  }), dayShiftsModal && React.createElement(DayShiftsModal, {
+  })), dayShiftsModal && React.createElement(DayShiftsModal, {
     data: data,
     onClose: () => setDayShiftsModal(false)
   }), cmdPaletteOpen && React.createElement(CommandPalette, {

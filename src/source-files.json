@@ -12,6 +12,7 @@
   "src/features/post/days.jsx",
   "src/features/post/people.jsx",
   "src/features/post/analytics.jsx",
+  "src/features/audit/history.jsx",
   "src/components/overlays.jsx",
   "src/features/post/person-card.jsx",
   "src/features/post/today.jsx",

@@ -4,6 +4,7 @@ const {PGlite} = require('@electric-sql/pglite');
 const express = require('express');
 const {runMigrations} = require('../lib/migrate');
 const {withTransaction} = require('../lib/db');
+const {auditMutation} = require('../lib/audit');
 const createRBAC = require('../lib/rbac');
 const registerRoutes = require('../routes/data');
 const createData = require('../lib/models/state');
@@ -38,12 +39,12 @@ beforeEach(async()=>{
   await pool.query("UPDATE users SET role=CASE id WHEN 1 THEN 'admin' WHEN 2 THEN 'lead' WHEN 3 THEN 'manager' WHEN 4 THEN 'editor' WHEN 5 THEN 'viewer' WHEN 6 THEN 'na' WHEN 7 THEN 'unexpected' ELSE 'admin' END");
   broadcasts.length=0;
 });
-async function request(url,method='GET',body,user=1){
+async function request(url,method='GET',body,user=1,extraHeaders={}){
   if(url==='/api/data'&&['POST','PUT'].includes(method)&&body&&!Object.hasOwn(body,'_revision')) {
     const current=await request('/api/data','GET',undefined,user);
     body={...body,_revision:current.body._revision};
   }
-  const response=await fetch(base+url,{method,headers:{'Content-Type':'application/json','x-test-user':String(user)},body:body===undefined?undefined:JSON.stringify(body)});
+  const response=await fetch(base+url,{method,headers:{'Content-Type':'application/json','x-test-user':String(user),...extraHeaders},body:body===undefined?undefined:JSON.stringify(body)});
   return {status:response.status,body:await response.json()};
 }
 const project=(id='p')=>({id,name:'Проект '+id,color:'#3b82f6',managers:[]});
@@ -57,7 +58,7 @@ async function fixture(){
 }
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
-  assert.equal(first,12);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+  assert.equal(first,13);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
 });
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);
@@ -86,12 +87,78 @@ test('bulk failure rolls back the whole save and returns an error',async()=>{
   assert.equal(result.status,400);assert.equal((await pool.query('SELECT id FROM projects')).rows.length,0);assert.equal(broadcasts.length,0);
 });
 
-test('bulk saves produce an audit entry in the same transaction; rejected saves produce none',async()=>{
+test('bulk saves produce confirmed entity events in the same transaction; rejected saves produce none',async()=>{
   assert.equal((await request('/api/data','PUT',{projects:[project()]})).status,200);
-  const entry=(await pool.query("SELECT user_id,details FROM audit_log WHERE entity='bulk'")).rows;
-  assert.equal(entry.length,1);assert.equal(entry[0].user_id,1);assert.equal(entry[0].details.counts.projects,1);
+  const entry=(await pool.query("SELECT user_id,action,project_id,details,changes FROM audit_log WHERE entity='project'")).rows;
+  assert.equal(entry.length,1);assert.equal(entry[0].user_id,1);assert.equal(entry[0].action,'create');
+  assert.equal(entry[0].project_id,'p');assert.equal(entry[0].details.bulk,true);assert.ok(entry[0].changes.length>0);
   assert.equal((await request('/api/data','PUT',{series:[series('bad','missing')]})).status,400);
-  assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity='bulk'")).rows[0].n,1);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_log")).rows[0].n,1);
+});
+test('shift creation, assignment, reschedule and deletion retain actor and old/new values',async()=>{
+  await fixture();
+  await pool.query('TRUNCATE audit_log RESTART IDENTITY');
+  const now=Date.now()+10000;
+  assert.equal((await request('/api/data/task','POST',{...task(2),person:'Анна',_updatedAt:now})).status,200);
+  assert.equal((await request('/api/data/task','POST',{...task(2),person:'Мария',_updatedAt:now+1000},1,{'x-change-reason':'staff-change'})).status,200);
+  assert.equal((await request('/api/data/task','POST',{...task(2),person:'Мария',day:'12.10.2026',_updatedAt:now+2000})).status,200);
+  assert.equal((await request('/api/data/task','POST',{...task(2),person:'Мария',day:'12.10.2026',cancelled:true,_updatedAt:now+3000})).status,200);
+  assert.equal((await request('/api/data/task','POST',{...task(2),person:'Мария',day:'12.10.2026',cancelled:false,_updatedAt:now+4000})).status,200);
+  assert.equal((await request('/api/data/task/2','DELETE')).status,200);
+  const rows=(await pool.query("SELECT user_id,user_name,action,project_id,changes,reason,source FROM audit_log WHERE entity='task' ORDER BY id")).rows;
+  assert.deepEqual(rows.map(row=>row.action),['create','assign','reschedule','cancel','restore','delete']);
+  assert.equal(rows[1].user_id,1);assert.equal(rows[1].user_name,'Пользователь 1');assert.equal(rows[1].source,'user');
+  assert.equal(rows[1].reason,'staff-change');
+  const assignment=rows[1].changes.find(change=>change.field==='person');
+  assert.equal(assignment.before,'Анна');assert.equal(assignment.after,'Мария');assert.equal(rows[1].project_id,'p');
+});
+test('mass saves create grouped events only for rows that actually changed',async()=>{
+  await fixture();await pool.query('TRUNCATE audit_log RESTART IDENTITY');
+  const snapshot=(await request('/api/data')).body;
+  snapshot.projects.find(item=>item.id==='p').description='Новое описание';
+  snapshot.tasks[0]={...snapshot.tasks[0],day:'13.10.2026',_updatedAt:Date.now()+10000};
+  snapshot.stages=[{id:'review',label:'Отсмотр',order:1}];
+  assert.equal((await request('/api/data','PUT',snapshot)).status,200);
+  const rows=(await pool.query('SELECT entity,action,request_id,details FROM audit_log ORDER BY id')).rows;
+  assert.deepEqual(rows.map(row=>row.entity).sort(),['project','settings','stage','task']);
+  assert.equal(new Set(rows.map(row=>row.request_id)).size,1);
+  assert.ok(rows.every(row=>row.details.bulk===true));
+});
+test('audit failure rolls the business change back instead of acknowledging success',async()=>{
+  const failingPool={
+    connect:async()=>{
+      const client=await pool.connect();
+      return {query:(sql,params)=>/^\s*INSERT INTO audit_log/i.test(sql)?Promise.reject(new Error('audit unavailable')):client.query(sql,params),release:()=>client.release()};
+    }
+  };
+  const isolated=express();isolated.use(express.json());isolated.use((req,res,next)=>{req.session={userId:1,displayName:'Пользователь 1'};next();});
+  isolated.post('/write',withTransaction(failingPool,async(req,res)=>{
+    await auditMutation(req,['project'],()=>req._tx.query("INSERT INTO projects(id,name) VALUES('atomic-audit','Временный')"));
+    res.json({ok:true});
+  }));
+  isolated.use((error,req,res,next)=>res.status(500).json({error:error.message}));
+  const listener=await new Promise(resolve=>{const item=isolated.listen(0,'127.0.0.1',()=>resolve(item));});
+  try{
+    assert.equal((await fetch('http://127.0.0.1:'+listener.address().port+'/write',{method:'POST'})).status,500);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM projects WHERE id='atomic-audit'")).rows[0].n,0);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity_id='atomic-audit'")).rows[0].n,0);
+  }finally{await new Promise(resolve=>listener.close(resolve));}
+});
+test('history API filters and paginates while enforcing view permissions',async()=>{
+  await fixture();
+  for(let id=10;id<22;id++)await request('/api/data/task','POST',{...task(id),_updatedAt:Date.now()+id});
+  await request('/api/data/task','POST',{...task(),note:'закрытая заметка',_updatedAt:Date.now()+10000});
+  const restricted=(await pool.query("SELECT event_id FROM audit_log WHERE visibility='restricted' ORDER BY id DESC LIMIT 1")).rows[0];
+  const filtered=await request('/api/audit/events?projectId=p&action=create&pageSize=10');
+  assert.equal(filtered.status,200);assert.ok(filtered.body.total>=10);assert.equal(filtered.body.events.length,10);
+  assert.ok(filtered.body.events.every(event=>event.projectId==='p'&&event.action==='create'));
+  assert.equal((await request('/api/audit/events','GET',undefined,4)).status,403);
+  assert.equal((await request('/api/audit/events','GET',undefined,5)).status,403);
+  const manager=await request('/api/audit/events','GET',undefined,3);
+  assert.equal(manager.status,200);assert.ok(manager.body.events.length>0);assert.ok(manager.body.events.every(event=>event.projectId==='p'));
+  assert.equal(manager.body.events.some(event=>event.id===restricted.event_id),false);
+  assert.equal((await request('/api/audit/events','GET')).body.events.some(event=>event.id===restricted.event_id),true);
+  assert.equal((await fetch(base+'/api/audit/events/'+restricted.event_id,{method:'DELETE',headers:{'x-test-user':'1'}})).status,404);
 });
 test('templates, account history and no-impact stage flags survive reload',async()=>{
   const result=await request('/api/data','PUT',{projects:[project()],templates:[{id:'template',name:'Шаблон'}],changelog:[{ts:1,text:'Создан проект'}],stages:[{id:'stage',label:'Отсмотр',order:1,noImpact:true}],people:[{id:'person',name:'Тест',allowParallel:true}]});
@@ -216,7 +283,7 @@ test('private task notes are hidden from viewers and editors and survive their e
 
 test('project credentials are absent for every application role and survive safe saves',async()=>{
   await fixture();
-  const markers={login:'credential-login-marker',password:'credential-password-marker',token:'credential-token-marker'};
+  const markers={login:'credential-login-marker',password:'credential-password-marker',token:'credential-token-marker',reason:'reason-secret-marker'};
   const stored={
     info:{type:'Документальный'},
     accesses:[{label:'Монтажная станция',login:markers.login,password:markers.password}],
@@ -240,13 +307,13 @@ test('project credentials are absent for every application role and survive safe
   assert.equal((await request('/api/data','PUT',snapshot)).status,200);
   const direct=(await request('/api/data')).body.projects.find(item=>item.id==='p');
   direct.name='Обновлённый проект';
-  assert.equal((await request('/api/data/project','POST',direct)).status,200);
+  assert.equal((await request('/api/data/project','POST',direct,1,{'x-change-reason':'token='+markers.reason})).status,200);
 
   const raw=(await pool.query('SELECT dossier FROM projects WHERE id=$1',['p'])).rows[0].dossier;
   assert.equal(raw.accesses[0].login,markers.login);
   assert.equal(raw.accesses[0].password,markers.password);
   assert.equal(raw.integration.token,markers.token);
-  const audit=JSON.stringify((await pool.query('SELECT details FROM audit_log')).rows);
+  const audit=JSON.stringify((await pool.query('SELECT * FROM audit_log')).rows);
   for(const marker of Object.values(markers))assert.equal(audit.includes(marker),false);
 });
 

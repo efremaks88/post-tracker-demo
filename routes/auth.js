@@ -1,5 +1,6 @@
 const crypto = require('crypto');
-const { logAudit } = require('../lib/db');
+const { withTransaction } = require('../lib/db');
+const { auditMutation } = require('../lib/audit');
 const createUsersModel = require('../lib/models/users');
 const { loginSchema, validate } = require('./schemas');
 
@@ -53,7 +54,6 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
       req.session.email = user.email;
       var csrfToken = ensureCsrfToken(req);
       if (singleSessionPerUser) await Users.cleanupSessions(user.id, req.sessionID);
-      await logAudit(pool, user.id, user.display_name, "login", "user", login, {});
       res.json({ user: { id: user.id, sam_name: user.sam_name, display_name: user.display_name, email: user.email, role: user.role, ad_groups: user.ad_groups, ad_enabled: user.ad_enabled }, csrfToken: csrfToken });
     } catch (e) {
       console.error("[LOGIN] Error:", e);
@@ -92,37 +92,38 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
     }
   });
 
-  app.put("/api/users/:id/role", requireAuth, blockNA, requireRole("admin"), async function(req, res) {
+  app.put("/api/users/:id/role", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
     try {
       var valid = ["admin","lead","manager","editor","viewer","na"];
       if (valid.indexOf(req.body.role) === -1) return res.status(400).json({ error: "Invalid role" });
-      var result = await Users.setRole(req.params.id, req.body.role);
+      var result = await auditMutation(req, ['user'], function() { return Users.setRoleTx(req._tx, req.params.id, req.body.role); });
       if (!result) return res.status(404).json({ error: "Not found" });
-      await logAudit(pool, req.session.userId, req.session.displayName, "change_role", "user", req.params.id, { new_role: req.body.role });
       res.json(result);
     } catch (e) {
       console.error("[ROLE] Error:", e);
       res.status(500).json({ error: "Internal error" });
     }
-  });
+  }));
 
-  app.put("/api/users/:id/projects", requireAuth, blockNA, requireRole("admin"), async function(req, res) {
+  app.put("/api/users/:id/projects", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
     try {
-      await Users.setProjects(req.params.id, req.body.projects || [], req.session.userId);
+      await auditMutation(req, ['userProject'], function() {
+        return Users.setProjectsTx(req._tx, req.params.id, req.body.projects || [], req.session.userId);
+      }, {bulk:true});
       res.json({ ok: true, count: (req.body.projects || []).length });
     } catch (e) {
       console.error("[PROJECTS] Error:", e);
       res.status(500).json({ error: "Assignment error" });
     }
-  });
+  }));
 
-  app.post("/api/users/sync", requireAuth, blockNA, requireRole("admin"), async function(req, res) {
+  app.post("/api/users/sync", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
     try {
-      var count = await syncAllADUsers();
+      var count = await auditMutation(req, ['user'], function() { return syncAllADUsers(req._tx); }, {source:'automation',bulk:true});
       res.json({ ok: true, synced: count });
     } catch (e) {
       console.error("[USERS SYNC] Error:", e);
       res.status(500).json({ error: "Sync error" });
     }
-  });
+  }));
 };

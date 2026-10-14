@@ -142,7 +142,6 @@ function App(){
   const viewRef=useRef(view);
   viewRef.current=view;
   const pendingLogRef=useRef([]);
-  const [changelogOpen,setChangelogOpen]=useState(false);
 
   useEffect(()=>{
     const protectUnsaved=event=>{
@@ -418,6 +417,7 @@ function App(){
     {id:"days",     label:"\u041d\u0415\u0414\u0415\u041b\u042f"},
     {id:"conflicts",  label:`Конфликты${conflictCount?` ⚡${conflictCount}`:""}`,warn:conflictCount>0, adminManagerOnly:true},
     {id:"analytics",  label:"Аналитика", adminManagerOnly:true},
+    {id:"history",    label:"История", adminManagerOnly:true},
     {id:"directory",  label:"⚙ Настройки", adminManagerOnly:true},
   ].filter(t=>{
     if(t.adminOnly && !isAdmin) return false;
@@ -458,7 +458,7 @@ function App(){
               saving:<span style={{fontSize:11,color:"#f59e0b"}}>⟳</span>,
               error: <span style={{fontSize:11,color:"#ef4444"}}>!</span>,
             }[syncState]}
-            <Btn variant="ghost" small onClick={()=>setChangelogOpen(true)}>📜</Btn>
+            <Btn variant="ghost" small onClick={()=>{setView("history");navigate(null);}}>📜 История</Btn>
             <Btn variant="ghost" small onClick={()=>setDayShiftsModal(true)}> Смены</Btn>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:8}}>
@@ -540,6 +540,8 @@ function App(){
             onBack={()=>navigate(null)} onSeriesSelect={id=>navigate({type:"series",id})}
             onDelete={canDeleteStructure?(id=>{deleteProject(id);navigate(null);}):null} onLog={addLog} canDeleteStructure={canDeleteStructure}
             canEditProject={canEditProjectById(navState.id)} canManageProjectAssignments={canManageProjectAssignments}/>
+        ):view==="history"&&canManage?(
+          <HistoryView data={data}/>
         ):(isMobile?(
           <MobileWorkspace view={view} data={data} conflictDetails={conflictDetails} setView={setView} navigate={navigate}/>
         ):(
@@ -557,7 +559,7 @@ function App(){
         </>
         ))}
 
-        {!isMobile&&!navState&&!["today","conflicts","analytics","directory"].includes(view)&&(
+        {!isMobile&&!navState&&!["today","conflicts","analytics","history","directory"].includes(view)&&(
           <div style={{marginTop:24,paddingTop:14,borderTop:"1px solid #1e293b",
             display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             <span style={{fontSize:10,color:"#334155",letterSpacing:2,marginRight:2}}>ГРУППЫ:</span>
@@ -577,7 +579,6 @@ function App(){
       </div>
       {isMobile&&!navState&&<MobileBottomNav tabs={TABS} view={view} setView={setView} navigate={navigate}/>}
     </div>
-    {changelogOpen&&<ChangelogModal entries={data.changelog||[]} onClose={()=>setChangelogOpen(false)}/>}
     {dayShiftsModal&&<DayShiftsModal data={data} onClose={()=>setDayShiftsModal(false)}/>}
     {cmdPaletteOpen&&<CommandPalette data={data} onClose={()=>setCmdPaletteOpen(false)}
       onNavigate={state=>{navigate(state);}}

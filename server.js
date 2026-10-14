@@ -15,6 +15,7 @@ const createLDAP   = require("./lib/ldap");
 const createRBAC   = require("./lib/rbac");
 const createSSE    = require("./lib/sse");
 const registerDataRoutes = require("./routes/data");
+const { captureAuditState, recordStateChanges } = require("./lib/audit");
 
 const app = express();
 app.disable("x-powered-by");
@@ -193,8 +194,22 @@ if (LOCAL_DEMO_MODE) app.use('/api', function(req, res, next) {
 // CRON: AD sync every 30 minutes
 if (!LOCAL_DEMO_MODE) cron.schedule("*/30 * * * *", async () => {
   console.log("[CRON] Starting AD sync...");
-  const count = await ldapMod.syncAllADUsers();
-  console.log("[CRON] AD sync completed: " + count + " users");
+  const tx = await pool.connect();
+  try {
+    await tx.query('BEGIN');
+    await tx.query("SELECT value FROM app_state WHERE key='revision' FOR UPDATE");
+    const before = await captureAuditState(tx, ['user']);
+    const count = await ldapMod.syncAllADUsers(tx);
+    const after = await captureAuditState(tx, ['user']);
+    await recordStateChanges(tx, before, after, {
+      userId:null,userName:'Автоматическая синхронизация',source:'automation',reason:'Плановая синхронизация каталога',requestId:crypto.randomUUID(),
+    }, {bulk:true});
+    await tx.query('COMMIT');
+    console.log("[CRON] AD sync completed: " + count + " users");
+  } catch (error) {
+    try { await tx.query('ROLLBACK'); } catch (rollbackError) {}
+    console.error('[CRON] AD sync failed:', error.message);
+  } finally { tx.release(); }
 });
 
 // CORS (same host only)
@@ -204,17 +219,17 @@ app.use(function(req, res, next) {
   const sameHost = !origin || origin === "http://" + host || origin === "https://" + host;
   if (!sameHost) return res.status(403).json({ error: "Forbidden" });
   res.setHeader("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, X-Change-Reason");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
 
 app.get('/api/runtime', function(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.2.3' : '' });
+  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.3.0' : '' });
 });
 app.get('/runtime-config.js', function(req, res) {
-  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.2.3' : '' };
+  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.3.0' : '' };
   res.setHeader('Cache-Control', 'no-store');
   res.type('application/javascript').send('window.__TRACKER_RUNTIME__=' + JSON.stringify(runtime) + ';');
 });

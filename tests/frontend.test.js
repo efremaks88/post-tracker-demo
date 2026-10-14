@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.2.3'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.3.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -71,6 +71,11 @@ test('missing optional arrays do not break loading and employee filtering',()=>{
   assert.equal(api.filterPeopleByStatus([{id:'x',active:true}], 'монтаж',api.DEFAULT_STAGES).length,0);
   assert.notEqual(api.accountBackupKey({sam_name:'one'}),api.accountBackupKey({sam_name:'two'}));
 });
+test('copied shifts use safe numeric IDs accepted by the server',()=>{
+  const first=api.genTaskId([{id:1}]);const second=api.genTaskId([{id:1},{id:first}]);
+  assert.equal(Number.isSafeInteger(first),true);assert.equal(Number.isSafeInteger(second),true);assert.notEqual(first,second);
+  assert.equal(source.includes('id:"task_"+ts'),false);
+});
 test('client state, save payload and JSON export omit project credentials',async()=>{
   const markers={login:'client-login-marker',password:'client-password-marker',token:'client-token-marker'};
   const input={projects:[{id:'secure',name:'Secure',dossier:{
@@ -117,7 +122,7 @@ const noop=()=>{};
 const shared={onUpdate:noop,onBatchUpdate:noop,onLog:noop,onPersonSelect:noop,onProjectSelect:noop,onSeriesSelect:noop,onBack:noop,
   canEdit:true,canDeleteStructure:true,canEditProject:true,canManageProjectAssignments:true,canEditProjectById:()=>true,
   conflictIds:new Set(),conflictDetails:[],user:{id:1,sam_name:'demo',display_name:'Демо',role:'admin'}};
-for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','DirectoryView']){
+for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','HistoryView','DirectoryView']){
   test('React rendering: '+name,()=>assert.ok(render(name,shared).length>100));
 }
 for(const [name,props] of [
@@ -135,11 +140,11 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.2.3'));
+  assert.ok(mobile.includes('DEV · v0.3.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
 });
-for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','DirectoryView']){
+for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','HistoryView','DirectoryView']){
   test('empty data rendering: '+name,()=>{
     const empty=api.normalizeLoadedData({stages:data.stages,stageGroups:data.stageGroups,roles:data.roles});
     assert.ok(render(name,{...shared,data:empty}).length>50);

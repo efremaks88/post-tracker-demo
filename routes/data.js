@@ -1,7 +1,9 @@
 const { projectSchema, seriesSchema, taskSchema, personSchema, achievementSchema, roleSchema, bulkSchema, validate } = require('./schemas');
 const registerAuthRoutes = require('./auth');
+const registerAuditRoutes = require('./audit');
 const protectBulk = require('../lib/bulk-access');
-const { withTransaction, logAudit } = require('../lib/db');
+const { withTransaction } = require('../lib/db');
+const { ALL_ENTITIES, auditMutation } = require('../lib/audit');
 const createProjectsModel = require('../lib/models/projects');
 const createSeriesModel = require('../lib/models/series');
 const createTasksModel = require('../lib/models/tasks');
@@ -36,6 +38,7 @@ var Roles = createRolesModel(pool);
   // API routes
 
   registerAuthRoutes(app, pool, deps);
+  registerAuditRoutes(app, pool, deps);
 
   // API routes
 
@@ -65,7 +68,16 @@ var Roles = createRolesModel(pool);
       const send=res.json;
       res.json=function(body){if(res.statusCode<400)body._revision=revision+1;return send.call(this,body);};
       try {
-        await handler(req,res);
+        let auditEntities = ALL_ENTITIES;
+        if (req.path !== '/api/data') {
+          if (req.path.includes('/project')) auditEntities = ['project','series','task'];
+          else if (req.path.includes('/series')) auditEntities = ['series','task'];
+          else if (req.path.includes('/task')) auditEntities = ['task'];
+          else if (req.path.includes('/person')) auditEntities = ['person','task','absence'];
+          else if (req.path.includes('/role')) auditEntities = ['role'];
+          else if (req.path.includes('/achievement')) auditEntities = ['achievement'];
+        }
+        await auditMutation(req, auditEntities, function() { return handler(req,res); }, {bulk:req.path==='/api/data'});
         if(res.statusCode<400)await req._tx.query("UPDATE app_state SET value=$1::jsonb,updated_at=NOW() WHERE key='revision'",[JSON.stringify(revision+1)]);
       } catch(error){
         if(error.status===400)return res.status(400).json({error:error.message});
@@ -80,8 +92,6 @@ var Roles = createRolesModel(pool);
     const data=req.body;
     await protectBulk(req._tx,data,req);
     await Data.syncAll(data,req._tx,req.session.userId);
-    const counts=Object.fromEntries(Object.entries(data).filter(([key,value])=>Array.isArray(value)).map(([key,value])=>[key,value.length]));
-    await logAudit(req._tx,req.session.userId,req.session.displayName,'save','bulk','',{counts});
     const allowed=isFullAccessRole(req.session.role)?null:await createUsersModel(req._tx).getProjects(req.session.userId,false);
     const result=await Data.loadAll(allowed,req.session.userId,req._tx);
     result._clientId=req.headers['x-client-id']||'';
@@ -103,7 +113,6 @@ var Roles = createRolesModel(pool);
         if (!canEditProject) return res.status(403).json({ error: "No edit rights" });
       }
       await Projects.upsert(req._tx, p);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "project", p.id, { name: p.name });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "project", id: p.id });
       res.json({ ok: true });
     } catch (e) {
@@ -119,7 +128,6 @@ var Roles = createRolesModel(pool);
       await Projects.softDelete(req._tx, id);
       await req._tx.query("UPDATE series SET deleted=true WHERE project_id=$1", [id]);
       await req._tx.query("UPDATE tasks SET deleted=true WHERE project_id=$1", [id]);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "project", id, {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "project-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
@@ -140,7 +148,6 @@ var Roles = createRolesModel(pool);
       const oldPid=await Series.getProjectId(req._tx,s.id);
       if(oldPid && !(await checkProjectAccess(req.session.userId,req.session.role,oldPid,true))) return res.status(403).json({error:'No edit rights'});
       await Series.upsert(req._tx, s);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "series", s.id, { name: s.name, projectId: s.projectId });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "series", id: s.id });
       res.json({ ok: true });
     } catch (e) {
@@ -155,7 +162,6 @@ var Roles = createRolesModel(pool);
       var id = req.params.id;
       await Series.softDelete(req._tx, id);
       await req._tx.query("UPDATE tasks SET deleted=true,updated_at=NOW() WHERE series_id=$1",[id]);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "series", id, {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "series-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
@@ -183,7 +189,6 @@ var Roles = createRolesModel(pool);
         t.note=original.rows[0]?.note||'';
       }
       await Tasks.upsert(req._tx, t);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "task", String(t.id), { status: t.status, project: t.project });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "task", id: t.id });
       res.json({ ok: true });
     } catch (e) {
@@ -206,7 +211,6 @@ var Roles = createRolesModel(pool);
           return res.status(403).json({ error: "No edit rights" });
       }
       await Tasks.softDelete(req._tx, id);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "task", String(id), {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "task-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
@@ -224,7 +228,6 @@ var Roles = createRolesModel(pool);
         pr.birthday = existing.rows[0] ? (existing.rows[0].birthday || '') : '';
       }
       await People.upsert(req._tx, pr);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "person", pr.id, { name: pr.name });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "person", id: pr.id });
       res.json({ ok: true });
     } catch (e) {
@@ -238,7 +241,6 @@ var Roles = createRolesModel(pool);
     try {
       var id = req.params.id;
       await People.softDelete(req._tx, id);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "person", id, {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "person-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
@@ -253,7 +255,6 @@ var Roles = createRolesModel(pool);
     try {
       var r = req.body;
       await Roles.upsert(req._tx, r);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "role", r.id, { label: r.label });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "role", id: r.id });
       res.json({ ok: true });
     } catch (e) {
@@ -267,7 +268,6 @@ var Roles = createRolesModel(pool);
     try {
       var id = req.params.id;
       await Roles.softDelete(req._tx, id);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "role", id, {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "role-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
@@ -282,7 +282,6 @@ var Roles = createRolesModel(pool);
     try {
       var a = req.body;
       await Achievements.upsert(req._tx, a);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "save", "achievement", a.id, { title: a.title });
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "achievement", id: a.id });
       res.json({ ok: true });
     } catch (e) {
@@ -296,7 +295,6 @@ var Roles = createRolesModel(pool);
     try {
       var id = req.params.id;
       await Achievements.remove(req._tx, id);
-      await logAudit(req._tx, req.session.userId, req.session.displayName, "delete", "achievement", id, {});
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "achievement-delete", id: id });
       res.json({ ok: true });
     } catch (e) {
