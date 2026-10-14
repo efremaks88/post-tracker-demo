@@ -6,8 +6,9 @@ const vm = require('node:vm');
 const babel = require('@babel/core');
 const React = require('react');
 const {renderToStaticMarkup} = require('react-dom/server');
+const {readFrontendSource}=require('../scripts/frontend-source');
 
-const source=fs.readFileSync(path.join(__dirname,'../src/index.jsx'),'utf8');
+const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},

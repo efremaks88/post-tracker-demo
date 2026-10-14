@@ -7,8 +7,9 @@ const babel = require('@babel/core');
 const React = require('react');
 const Renderer = require('react-test-renderer');
 const { act } = Renderer;
+const { readFrontendSource } = require('../scripts/frontend-source');
 
-const source = fs.readFileSync(path.join(__dirname,'../src/index.jsx'),'utf8');
+const source = readFrontendSource(path.join(__dirname,'..'));
 const names = [...source.matchAll(/^function (\w+)/gm)].map(match=>match[1]);
 const context = {
   React,
