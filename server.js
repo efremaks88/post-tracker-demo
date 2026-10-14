@@ -9,7 +9,7 @@ const fs           = require("fs");
 const envPath=path.join(__dirname,'.env');
 if(fs.existsSync(envPath)) process.loadEnvFile(envPath);
 
-const { initPool } = require("./lib/db");
+const { initPool, ensureAuditTable } = require("./lib/db");
 const { runMigrations } = require("./lib/migrate");
 const createLDAP   = require("./lib/ldap");
 const createRBAC   = require("./lib/rbac");
@@ -94,9 +94,14 @@ function requireCsrf(req, res, next) {
 }
 
 // Config
+const LOCAL_DEMO_MODE = process.env.LOCAL_DEMO_MODE === 'true';
+if (LOCAL_DEMO_MODE && process.env.NODE_ENV === 'production') {
+  console.error('[FATAL] LOCAL_DEMO_MODE cannot run with NODE_ENV=production');
+  process.exit(1);
+}
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
-const _sessionSecret = process.env.SESSION_SECRET;
+const HOST = LOCAL_DEMO_MODE ? '127.0.0.1' : (process.env.HOST || '127.0.0.1');
+const _sessionSecret = LOCAL_DEMO_MODE ? crypto.randomBytes(48).toString('hex') : process.env.SESSION_SECRET;
 const LDAP_URL = process.env.LDAP_URL || "ldap://ldap.example.local:389";
 const LDAP_DOMAIN = process.env.LDAP_DOMAIN || "example.local";
 const LDAP_BASE_DN = process.env.LDAP_BASE_DN || "dc=example,dc=local";
@@ -104,8 +109,12 @@ const LDAP_BIND_DN = process.env.LDAP_BIND_DN || "service-account@example.local"
 const _ldapBindPass = process.env.LDAP_BIND_PASSWORD;
 const SINGLE_SESSION_PER_USER = process.env.SINGLE_SESSION_PER_USER === "true";
 
-// Initialize pool via DAL
-const pool = initPool({
+// Initialize the production PostgreSQL pool or the isolated local demo store.
+var localDemoModule = null;
+const pool = LOCAL_DEMO_MODE ? (function() {
+  localDemoModule = require('./lib/local-demo');
+  return localDemoModule.createLocalPool(path.join(__dirname, 'local-data', 'pglite'));
+})() : initPool({
   DB_HOST:     process.env.DB_HOST     || "localhost",
   DB_PORT:     Number(process.env.DB_PORT) || 5432,
   DB_NAME:     process.env.DB_NAME     || "postprod_tracker",
@@ -114,7 +123,7 @@ const pool = initPool({
 });
 
 // Fail fast if required secrets are missing
-if (!process.env.DB_PASSWORD) {
+if (!LOCAL_DEMO_MODE && !process.env.DB_PASSWORD) {
   console.error("[FATAL] DB_PASSWORD not set in environment");
   process.exit(1);
 }
@@ -122,7 +131,7 @@ if (!_sessionSecret) {
   console.error("[FATAL] SESSION_SECRET not set in environment");
   process.exit(1);
 }
-if (!_ldapBindPass) {
+if (!LOCAL_DEMO_MODE && !_ldapBindPass) {
   console.error("[FATAL] LDAP_BIND_PASSWORD not set in environment");
   process.exit(1);
 }
@@ -135,7 +144,15 @@ const ldapConfig = {
   LDAP_BIND_DN: LDAP_BIND_DN,
   LDAP_BIND_PASS: _ldapBindPass,
 };
-var ldapMod = createLDAP(pool, ldapConfig);
+var ldapMod = LOCAL_DEMO_MODE ? {
+  syncADUser: async function() { return null; },
+  syncAllADUsers: async function() { return 0; },
+  listADUsers: async function() { return []; },
+  ldapBind: async function() { throw new Error('Directory login is disabled in local demo mode'); },
+  ldapSearchUser: async function() { return null; },
+  isUserEnabled: function() { return true; },
+  initialRoleFromGroups: function() { return 'viewer'; },
+} : createLDAP(pool, ldapConfig);
 
 // RBAC module
 var rbac = createRBAC(pool);
@@ -143,28 +160,38 @@ var rbac = createRBAC(pool);
 // SSE module
 var sse = createSSE();
 
-// Sessions (PostgreSQL)
-app.use(session({
+// Sessions use PostgreSQL in production and memory on loopback-only local demo.
+const sessionOptions = {
   name: "tracker.sid",
   secret: _sessionSecret,
   resave: false,
   saveUninitialized: false,
-  store: new pgSession({
+  cookie: {
+    httpOnly: true,
+    secure: LOCAL_DEMO_MODE ? false : process.env.COOKIE_SECURE !== 'false',
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+};
+if (!LOCAL_DEMO_MODE) sessionOptions.store = new pgSession({
     pool: pool,
     tableName: "session",
     createTableIfMissing: true,
     ttl: 24 * 60 * 60,
-  }),
-  cookie: {
-    httpOnly: true,
-    secure: process.env.COOKIE_SECURE !== 'false',
-    sameSite: "strict",
-    maxAge: 24 * 60 * 60 * 1000,
-  },
-}));
+  });
+app.use(session(sessionOptions));
+
+var localDemoUser = { id: 0, sam_name: 'local-demo', display_name: 'Локальный администратор', role: 'admin' };
+if (LOCAL_DEMO_MODE) app.use('/api', function(req, res, next) {
+  req.session.userId = localDemoUser.id;
+  req.session.samName = localDemoUser.sam_name;
+  req.session.displayName = localDemoUser.display_name;
+  req.session.role = localDemoUser.role;
+  next();
+});
 
 // CRON: AD sync every 30 minutes
-cron.schedule("*/30 * * * *", async () => {
+if (!LOCAL_DEMO_MODE) cron.schedule("*/30 * * * *", async () => {
   console.log("[CRON] Starting AD sync...");
   const count = await ldapMod.syncAllADUsers();
   console.log("[CRON] AD sync completed: " + count + " users");
@@ -180,6 +207,16 @@ app.use(function(req, res, next) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
+});
+
+app.get('/api/runtime', function(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.2.3' : '' });
+});
+app.get('/runtime-config.js', function(req, res) {
+  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.2.3' : '' };
+  res.setHeader('Cache-Control', 'no-store');
+  res.type('application/javascript').send('window.__TRACKER_RUNTIME__=' + JSON.stringify(runtime) + ';');
 });
 
 app.use("/api/", function(req, res, next) {
@@ -245,12 +282,23 @@ sse.startKeepalive();
 (async function() {
   try {
     await runMigrations(pool);
+    await ensureAuditTable(pool);
     console.log("[MIGRATE] All migrations applied successfully");
   } catch (e) {
     console.error("[MIGRATE] Migration failed:", e.message);
     process.exit(1);
   }
-  app.listen(PORT, HOST, () => {
-    console.log("[SERVER] Started on port " + PORT);
+  if (LOCAL_DEMO_MODE) {
+    localDemoUser = await localDemoModule.seedLocalDemo(pool);
+    console.log('[LOCAL] Isolated demo database: ' + pool.dataDir);
+  }
+  const server = app.listen(PORT, HOST, () => {
+    console.log("[SERVER] Started at http://" + HOST + ":" + PORT);
+    if (LOCAL_DEMO_MODE) console.log('[LOCAL] Demo mode enabled; LDAP and production PostgreSQL are disabled');
+  });
+  if (LOCAL_DEMO_MODE) process.on('SIGINT', function() {
+    server.close(async function() {
+      try { await pool.close(); } finally { process.exit(0); }
+    });
   });
 })();

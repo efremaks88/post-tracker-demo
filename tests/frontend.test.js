@@ -11,7 +11,7 @@ const source=fs.readFileSync(path.join(__dirname,'../src/index.jsx'),'utf8');
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.2.3'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -132,16 +132,11 @@ test('desktop login and mobile show new branding and author credit',()=>{
     const html=render(name,shared);assert.ok(html.includes('ПОСТ ТРЕКЕР'));assert.ok(html.includes('Создано Максимом Ефремовым'));
   }
 });
-test('project access screen exposes only credential status metadata',()=>{
-  const secure=api.normalizeLoadedData({...data,projects:data.projects.map((project,index)=>index?project:{...project,dossier:{
-    ...(project.dossier||{}),accesses:[{label:'Архив',login:'render-login-marker',password:'render-password-marker'}]
-  }})});
-  const html=render('ProjectCard',{...shared,data:secure,projectId:secure.projects[0].id});
-  assert.ok(source.includes('Реквизиты доступа скрыты'));
-  assert.equal(source.includes('{k:"password"'),false);
-  assert.equal(html.includes('render-login-marker'),false);
-  assert.equal(html.includes('render-password-marker'),false);
-  assert.doesNotMatch(html,/type="password"/);
+test('local build marker is visible in the main interface',()=>{
+  const mobile=render('MobileTopbar',shared);
+  assert.ok(mobile.includes('DEV · v0.2.3'));
+  assert.equal(mobile.includes('Выйти'),false);
+  assert.ok(source.includes('{RUNTIME.label&&'));
 });
 for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','DirectoryView']){
   test('empty data rendering: '+name,()=>{

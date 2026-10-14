@@ -492,6 +492,7 @@ const STORAGE_MODE = "server";
 //  Если браузер открывает страницу с того же сервера — оставьте "".
 //  Если разработка на отдельной машине — укажите, например: "http://192.168.1.50:3000"
 const SERVER_URL = "";
+const RUNTIME = typeof window!=="undefined"&&window.__TRACKER_RUNTIME__ ? window.__TRACKER_RUNTIME__ : {};
 const DATA_ARRAY_KEYS=["projects","series","tasks","people","roles","stages","stageGroups","holidays","achievements","personAbsences","templates","changelog"];
 const CLIENT_SECRET_KEY=/^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
 const CLIENT_ACCESS_SECRET_KEY=/^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
@@ -7143,11 +7144,11 @@ function UsersView({user,onUserUpdate}){
               padding:"5px 12px",color:"#e2e8f0",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
             {showDisabled?"OK Все":" Только активные"}
           </button>
-          <button onClick={syncAD} disabled={syncing}
+          {RUNTIME.mode!=="local-demo"&&<button onClick={syncAD} disabled={syncing}
             style={{background:"rgba(30,41,59,.72)",border:"1px solid rgba(148,163,184,.18)",borderRadius:10,
               padding:"5px 12px",color:"#e2e8f0",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
             {syncing?"⏳ Синхронизация...":"🔄 Синхр. AD"}
-          </button>
+          </button>}
         </div>
       </div>
       {loading?<div style={{color:"#475569"}}>Загрузка...</div>:
@@ -7260,13 +7261,14 @@ function MobileTopbar({user,syncState,onSearch,onLogout,onShifts}){
       <div>
         <div className="ppt-title ppt-mobile-brand">ПОСТ ТРЕКЕР</div>
         <div className="ppt-author">Создано Максимом Ефремовым</div>
+        {RUNTIME.label&&<div style={{fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:.8,marginTop:2}}>{RUNTIME.label}</div>}
         <div className="ppt-mobile-subtitle">{user?.display_name||""}</div>
       </div>
       <div className="ppt-mobile-actions">
         <button className="ppt-mobile-icon-btn" onClick={onSearch} title={MT.search}>{MT.search}</button>
         <button className="ppt-mobile-icon-btn" onClick={onShifts} title={MT.shifts}>{MT.shifts}</button>
         <span className={`ppt-mobile-sync ppt-mobile-sync-${syncState}`}>{syncState==="error"?"!":syncState==="saving"?"...":"OK"}</span>
-        <button className="ppt-mobile-logout" onClick={onLogout}>{MT.logout}</button>
+        {RUNTIME.mode!=="local-demo"&&<button className="ppt-mobile-logout" onClick={onLogout}>{MT.logout}</button>}
       </div>
     </div>
   );
@@ -7891,7 +7893,7 @@ function App(){
             <div className="ppt-title" style={{fontSize:23,fontWeight:900,letterSpacing:.2,lineHeight:1.05}}>
               ПОСТ ТРЕКЕР
             </div>
-            <div style={{fontSize:12,color:"#9aa9bd",marginTop:4,fontWeight:600}}>Планирование постпродакшна <span style={{marginLeft:8,fontSize:11,color:"#94a3b8"}}>v{VERSION}</span></div>
+            <div style={{fontSize:12,color:"#9aa9bd",marginTop:4,fontWeight:600}}>Планирование постпродакшна <span style={{marginLeft:8,fontSize:11,color:"#94a3b8"}}>v{VERSION}</span>{RUNTIME.label&&<span style={{marginLeft:8,fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:.8}}>{RUNTIME.label}</span>}</div>
             <div className="ppt-author">Создано Максимом Ефремовым</div>
           </div>
           <div style={{flex:1,display:"flex",justifyContent:"center"}}>
@@ -7918,12 +7920,12 @@ function App(){
             <span style={{fontSize:12,color:"#cbd5e1",fontWeight:700}}>{user.display_name}</span>
             <span style={{fontSize:10,color:"#9aa9bd",background:"rgba(8,13,26,.56)",borderRadius:999,
               padding:"2px 8px",border:"1px solid rgba(148,163,184,.22)",fontWeight:800}}>{user.role}</span>
-            <button onClick={handleLogout}
+            {RUNTIME.mode!=="local-demo"&&<button onClick={handleLogout}
               className="ppt-btn"
               style={{background:"rgba(15,23,42,.34)",border:"1px solid rgba(148,163,184,.22)",borderRadius:14,color:"#a9b8cc",
                 fontSize:11,cursor:"pointer",padding:"4px 8px",fontFamily:"inherit",fontWeight:700}}>
               Выйти
-            </button>
+            </button>}
           </div>
         </div>
         {navState?.type==="project"?(

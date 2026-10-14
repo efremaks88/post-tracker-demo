@@ -2,7 +2,7 @@ const { z } = require('zod');
 const crypto = require('crypto');
 const protectBulk = require('../lib/bulk-access');
 const { validDay, validBirthday } = require('../lib/validation');
-const { withTransaction, ensureAuditTable, logAudit } = require('../lib/db');
+const { withTransaction, logAudit } = require('../lib/db');
 const createProjectsModel = require('../lib/models/projects');
 const createSeriesModel = require('../lib/models/series');
 const createTasksModel = require('../lib/models/tasks');
@@ -315,8 +315,6 @@ var Roles = createRolesModel(pool);
   var Users = createUsersModel(pool);
   var Data = createDataModel(pool);
   var Achievements = createAchievementsModel(pool);
-
-  ensureAuditTable(pool);
 
   // API routes
 

@@ -1883,6 +1883,7 @@ const VERSION = "1.4.2";
 const BUILD_DATE = "11.10.2026";
 const STORAGE_MODE = "server";
 const SERVER_URL = "";
+const RUNTIME = typeof window !== "undefined" && window.__TRACKER_RUNTIME__ ? window.__TRACKER_RUNTIME__ : {};
 const DATA_ARRAY_KEYS = ["projects", "series", "tasks", "people", "roles", "stages", "stageGroups", "holidays", "achievements", "personAbsences", "templates", "changelog"];
 const CLIENT_SECRET_KEY = /^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
 const CLIENT_ACCESS_SECRET_KEY = /^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
@@ -17338,7 +17339,7 @@ function UsersView(_ref107) {
       cursor: "pointer",
       fontFamily: "inherit"
     }
-  }, showDisabled ? "OK Все" : " Только активные"), React.createElement("button", {
+  }, showDisabled ? "OK Все" : " Только активные"), RUNTIME.mode !== "local-demo" && React.createElement("button", {
     onClick: syncAD,
     disabled: syncing,
     style: {
@@ -17556,7 +17557,15 @@ function MobileTopbar(_ref109) {
     className: "ppt-title ppt-mobile-brand"
   }, "\u041F\u041E\u0421\u0422 \u0422\u0420\u0415\u041A\u0415\u0420"), React.createElement("div", {
     className: "ppt-author"
-  }, "\u0421\u043E\u0437\u0434\u0430\u043D\u043E \u041C\u0430\u043A\u0441\u0438\u043C\u043E\u043C \u0415\u0444\u0440\u0435\u043C\u043E\u0432\u044B\u043C"), React.createElement("div", {
+  }, "\u0421\u043E\u0437\u0434\u0430\u043D\u043E \u041C\u0430\u043A\u0441\u0438\u043C\u043E\u043C \u0415\u0444\u0440\u0435\u043C\u043E\u0432\u044B\u043C"), RUNTIME.label && React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#fbbf24",
+      fontWeight: 800,
+      letterSpacing: .8,
+      marginTop: 2
+    }
+  }, RUNTIME.label), React.createElement("div", {
     className: "ppt-mobile-subtitle"
   }, (user === null || user === void 0 ? void 0 : user.display_name) || "")), React.createElement("div", {
     className: "ppt-mobile-actions"
@@ -17570,7 +17579,7 @@ function MobileTopbar(_ref109) {
     title: MT.shifts
   }, MT.shifts), React.createElement("span", {
     className: `ppt-mobile-sync ppt-mobile-sync-${syncState}`
-  }, syncState === "error" ? "!" : syncState === "saving" ? "..." : "OK"), React.createElement("button", {
+  }, syncState === "error" ? "!" : syncState === "saving" ? "..." : "OK"), RUNTIME.mode !== "local-demo" && React.createElement("button", {
     className: "ppt-mobile-logout",
     onClick: onLogout
   }, MT.logout)));
@@ -18750,7 +18759,15 @@ function App() {
       fontSize: 11,
       color: "#94a3b8"
     }
-  }, "v", VERSION)), React.createElement("div", {
+  }, "v", VERSION), RUNTIME.label && React.createElement("span", {
+    style: {
+      marginLeft: 8,
+      fontSize: 10,
+      color: "#fbbf24",
+      fontWeight: 800,
+      letterSpacing: .8
+    }
+  }, RUNTIME.label)), React.createElement("div", {
     className: "ppt-author"
   }, "\u0421\u043E\u0437\u0434\u0430\u043D\u043E \u041C\u0430\u043A\u0441\u0438\u043C\u043E\u043C \u0415\u0444\u0440\u0435\u043C\u043E\u0432\u044B\u043C")), React.createElement("div", {
     style: {
@@ -18851,7 +18868,7 @@ function App() {
       border: "1px solid rgba(148,163,184,.22)",
       fontWeight: 800
     }
-  }, user.role), React.createElement("button", {
+  }, user.role), RUNTIME.mode !== "local-demo" && React.createElement("button", {
     onClick: handleLogout,
     className: "ppt-btn",
     style: {
