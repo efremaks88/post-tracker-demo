@@ -19,6 +19,9 @@ function fail(message) {
 const indexHtml = read("public/index.html");
 const serverJs = read("server.js");
 const routesDataJs = read("routes/data.js");
+const routesAuthJs = read("routes/auth.js");
+const routeSchemasJs = read("routes/schemas.js");
+const serverRouteSources = routesDataJs + "\n" + routesAuthJs;
 const ldapJs = read("lib/ldap.js");
 const packageJson = JSON.parse(read("package.json"));
 
@@ -50,7 +53,7 @@ if (/unsafe-inline/.test(indexHtml) || /unsafe-inline/.test(applyScript)) {
 if (!/function requireCsrf/.test(serverJs) || !/timingSafeEqual/.test(serverJs) || !/isSameOrigin/.test(serverJs)) {
   fail("CSRF middleware must check token with timingSafeEqual and same-origin headers");
 }
-if (/res\.status\(500\)[^\n]+e\.message/.test(routesDataJs) || /res\.status\(500\)[^\n]+e\.message/.test(serverJs)) {
+if (/res\.status\(500\)[^\n]+e\.message/.test(serverRouteSources) || /res\.status\(500\)[^\n]+e\.message/.test(serverJs)) {
   fail("500 responses must not expose e.message");
 }
 if (!/express\.json\(\{\s*limit:\s*["']5mb["']\s*\}\)/.test(serverJs)) {
@@ -74,22 +77,22 @@ if (!/sameSite:\s*["']strict["']/.test(serverJs)) {
 if (!/function rateLimitKey/.test(serverJs) || !/keyGenerator:\s*rateLimitKey/.test(serverJs)) {
   fail("API rate limiters must use authenticated user-aware keys");
 }
-if (!/req\.session\.regenerate/.test(routesDataJs) || !/await regenerateSession\(req\);[\s\S]*req\.session\.userId/.test(routesDataJs)) {
+if (!/req\.session\.regenerate/.test(routesAuthJs) || !/await regenerateSession\(req\);[\s\S]*req\.session\.userId/.test(routesAuthJs)) {
   fail("login must regenerate session before assigning authenticated user data");
 }
-if (!/SINGLE_SESSION_PER_USER/.test(serverJs) || !/if \(singleSessionPerUser\) await Users\.cleanupSessions/.test(routesDataJs)) {
+if (!/SINGLE_SESSION_PER_USER/.test(serverJs) || !/if \(singleSessionPerUser\) await Users\.cleanupSessions/.test(routesAuthJs)) {
   fail("cleanupSessions must be opt-in through SINGLE_SESSION_PER_USER");
 }
-if (!/login:\s*z\.string\(\)\.min\(1\)\.max\(100\)\.regex/.test(routesDataJs)) {
+if (!/login:\s*z\.string\(\)\.min\(1\)\.max\(100\)\.regex/.test(routeSchemasJs)) {
   fail("login input must be constrained before LDAP usage");
 }
-if (!/app\.get\(["']\/api\/users["'][\s\S]*requireRole\(["']admin["'],\s*["']lead["'],\s*["']manager["']\)/.test(routesDataJs)) {
+if (!/app\.get\(["']\/api\/users["'][\s\S]*requireRole\(["']admin["'],\s*["']lead["'],\s*["']manager["']\)/.test(routesAuthJs)) {
   fail("GET /api/users must be restricted to admin/lead/manager");
 }
-if (!/app\.put\(["']\/api\/users\/:id\/role["'][\s\S]*requireRole\(["']admin["']\)/.test(routesDataJs)) {
+if (!/app\.put\(["']\/api\/users\/:id\/role["'][\s\S]*requireRole\(["']admin["']\)/.test(routesAuthJs)) {
   fail("role changes must be admin-only");
 }
-if (!/app\.put\(["']\/api\/users\/:id\/projects["'][\s\S]*requireRole\(["']admin["']\)/.test(routesDataJs)) {
+if (!/app\.put\(["']\/api\/users\/:id\/projects["'][\s\S]*requireRole\(["']admin["']\)/.test(routesAuthJs)) {
   fail("project access changes must be admin-only");
 }
 if (!/No project create rights/.test(routesDataJs)) {
