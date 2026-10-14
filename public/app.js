@@ -13051,63 +13051,83 @@ function HistoryView(_ref73) {
   }, "\u041F\u043E \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u044B\u043C \u0444\u0438\u043B\u044C\u0442\u0440\u0430\u043C \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u043D\u0435\u0442") : React.createElement("div", {
     style: {
       display: "grid",
-      gap: 8
+      gap: 5
     }
   }, result.events.map(event => {
     var _event$details;
-    return React.createElement("div", {
+    return React.createElement("details", {
       key: event.id,
       style: {
-        display: "grid",
-        gridTemplateColumns: "145px minmax(140px,190px) minmax(180px,1fr) minmax(280px,2fr)",
-        gap: 14,
-        alignItems: "start",
-        padding: "13px 15px",
         background: "rgba(15,23,42,.58)",
         border: "1px solid rgba(148,163,184,.16)",
-        borderRadius: 14
+        borderRadius: 11,
+        overflow: "hidden"
       }
-    }, React.createElement("div", {
+    }, React.createElement("summary", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "130px minmax(130px,180px) minmax(260px,1fr) auto",
+        gap: 10,
+        alignItems: "center",
+        padding: "8px 12px",
+        cursor: "pointer",
+        listStyle: "none"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#8ea2bb",
+        whiteSpace: "nowrap"
+      }
+    }, auditTime(event.occurredAt)), React.createElement("span", {
       style: {
         fontSize: 11,
-        color: "#8ea2bb",
-        lineHeight: 1.5
-      }
-    }, auditTime(event.occurredAt), React.createElement("div", {
-      style: {
-        color: event.source === "user" ? "#64748b" : "#c084fc"
-      }
-    }, event.source === "user" ? "пользователь" : event.source)), React.createElement("div", {
-      style: {
-        fontSize: 12,
         fontWeight: 700,
-        color: "#dbeafe"
+        color: "#dbeafe",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis"
       }
-    }, event.userName || "Система"), React.createElement("div", null, React.createElement("div", {
+    }, event.userName || "Система"), React.createElement("span", {
       style: {
-        fontSize: 12,
+        minWidth: 0
+      }
+    }, React.createElement("span", {
+      style: {
+        fontSize: 11,
         fontWeight: 800,
         color: event.action === "delete" ? "#fca5a5" : event.action === "create" ? "#86efac" : "#93c5fd"
       }
-    }, AUDIT_ACTION_LABELS[event.action] || event.action), React.createElement("div", {
+    }, AUDIT_ACTION_LABELS[event.action] || event.action), React.createElement("span", {
       style: {
-        fontSize: 12,
+        fontSize: 11,
         color: "#cbd5e1",
-        marginTop: 3
+        marginLeft: 7
       }
-    }, AUDIT_ENTITY_LABELS[event.entity] || event.entity, (_event$details = event.details) !== null && _event$details !== void 0 && _event$details.label ? ": " + event.details.label : ""), (event.projectName || event.seriesName) && React.createElement("div", {
+    }, AUDIT_ENTITY_LABELS[event.entity] || event.entity, (_event$details = event.details) !== null && _event$details !== void 0 && _event$details.label ? ": " + event.details.label : ""), (event.projectName || event.seriesName) && React.createElement("span", {
       style: {
         fontSize: 10,
         color: "#64748b",
-        marginTop: 4
+        marginLeft: 7
       }
-    }, [event.projectName, event.seriesName].filter(Boolean).join(" · "))), React.createElement("div", {
+    }, [event.projectName, event.seriesName].filter(Boolean).join(" · "))), React.createElement("span", {
       style: {
+        fontSize: 10,
+        color: "#7dd3fc",
+        whiteSpace: "nowrap"
+      }
+    }, "\u041F\u043E\u0434\u0440\u043E\u0431\u043D\u0435\u0435 \xB7 ", (event.changes || []).length, " \u25BE")), React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "minmax(260px,1fr) minmax(160px,280px)",
+        gap: 16,
+        padding: "9px 12px 11px",
+        borderTop: "1px solid rgba(148,163,184,.12)",
         fontSize: 11,
         lineHeight: 1.55,
         color: "#94a3b8"
       }
-    }, (event.changes || []).slice(0, 8).map((change, index) => React.createElement("div", {
+    }, React.createElement("div", null, (event.changes || []).map((change, index) => React.createElement("div", {
       key: change.field + index,
       style: {
         marginBottom: 2
@@ -13126,12 +13146,16 @@ function HistoryView(_ref73) {
       style: {
         color: "#e2e8f0"
       }
-    }, auditValue(change.after)))), (event.changes || []).length > 8 && React.createElement("div", null, "\u0438 \u0435\u0449\u0451 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439: ", event.changes.length - 8), event.reason && React.createElement("div", {
+    }, auditValue(change.after)))), !(event.changes || []).length && React.createElement("span", null, "\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0439 \u043D\u0435\u0442"), event.reason && React.createElement("div", {
       style: {
         marginTop: 5,
         color: "#fcd34d"
       }
-    }, "\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ", event.reason)));
+    }, "\u041F\u0440\u0438\u0447\u0438\u043D\u0430: ", event.reason)), React.createElement("div", {
+      style: {
+        color: "#64748b"
+      }
+    }, "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: ", event.source === "user" ? "пользователь" : event.source, React.createElement("br", null), "\u041E\u0431\u044A\u0435\u043A\u0442: ", event.entityId || "—")));
   })), React.createElement("div", {
     style: {
       display: "flex",
