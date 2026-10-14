@@ -6,6 +6,7 @@ const {runMigrations} = require('../lib/migrate');
 const {withTransaction} = require('../lib/db');
 const {auditMutation} = require('../lib/audit');
 const createRBAC = require('../lib/rbac');
+const {PERMISSIONS,FUTURE_PERMISSIONS,roleHasPermission,createPolicy} = require('../lib/policy');
 const registerRoutes = require('../routes/data');
 const createData = require('../lib/models/state');
 const createUsers = require('../lib/models/users');
@@ -56,6 +57,49 @@ async function fixture(){
   await pool.query("INSERT INTO project_managers(project_id,user_uid,user_name) VALUES('p','user3','Пользователь 3')");
   await pool.query("INSERT INTO user_projects(user_id,project_id,can_view,can_edit) VALUES(4,'p',true,true),(5,'p',true,false)");
 }
+test('central permission matrix preserves current roles and denies future permissions',()=>{
+  const expected={
+    admin:[true,true,true,true,true],
+    lead:[true,true,true,true,false],
+    manager:[true,true,false,true,false],
+    editor:[true,true,false,false,false],
+    viewer:[true,false,false,false,false],
+    na:[false,false,false,false,false],
+    unexpected:[false,false,false,false,false],
+  };
+  for(const [role,grants] of Object.entries(expected)){
+    assert.deepEqual([
+      roleHasPermission(role,PERMISSIONS.POST_READ),
+      roleHasPermission(role,PERMISSIONS.POST_WRITE),
+      roleHasPermission(role,PERMISSIONS.POST_DIRECTORY_WRITE),
+      roleHasPermission(role,PERMISSIONS.AUDIT_VIEW),
+      roleHasPermission(role,PERMISSIONS.USERS_MANAGE),
+    ],grants,role);
+    for(const permission of FUTURE_PERMISSIONS) assert.equal(roleHasPermission(role,permission),false,role+' '+permission);
+  }
+});
+test('central project and audit scopes enforce manager, editor and viewer boundaries',async()=>{
+  await fixture();
+  const policy=createPolicy(pool);
+  assert.equal(await policy.can({userId:3,role:'manager'},PERMISSIONS.POST_PROJECT_EDIT,{projectId:'p'}),true);
+  assert.equal(await policy.can({userId:3,role:'manager'},PERMISSIONS.POST_PROJECT_EDIT,{projectId:'other'}),false);
+  assert.equal(await policy.can({userId:4,role:'editor'},PERMISSIONS.POST_PROJECT_EDIT,{projectId:'p'}),true);
+  assert.equal(await policy.can({userId:5,role:'viewer'},PERMISSIONS.POST_PROJECT_VIEW,{projectId:'p'}),true);
+  assert.equal(await policy.can({userId:5,role:'viewer'},PERMISSIONS.POST_PROJECT_EDIT,{projectId:'p'}),false);
+  const managerAudit=await policy.auditScope({userId:3,role:'manager'});
+  assert.deepEqual(managerAudit.projectIds,['p']);assert.equal(managerAudit.includeRestricted,false);
+  const leadAudit=await policy.auditScope({userId:2,role:'lead'});
+  assert.equal(leadAudit.projectIds,null);assert.equal(leadAudit.includeRestricted,true);
+  assert.equal(await policy.auditScope({userId:4,role:'editor'}),null);
+});
+test('route permissions keep user management and directories at their previous boundaries',async()=>{
+  for(const user of [1,2,3]) assert.equal((await request('/api/users','GET',undefined,user)).status,200);
+  for(const user of [4,5,6,7]) assert.equal((await request('/api/users','GET',undefined,user)).status,403);
+  assert.equal((await request('/api/data/person','POST',{id:'lead-person',name:'Создан руководителем'},2)).status,200);
+  assert.equal((await request('/api/data/person','POST',{id:'manager-person',name:'Запрещено'},3)).status,403);
+  assert.equal((await request('/api/data/achievement','POST',{id:'admin-achievement',title:'Разрешено'},1)).status,200);
+  assert.equal((await request('/api/data/achievement','POST',{id:'lead-achievement',title:'Запрещено'},2)).status,403);
+});
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
   assert.equal(first,13);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);

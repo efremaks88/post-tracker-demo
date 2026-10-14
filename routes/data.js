@@ -8,21 +8,15 @@ const createProjectsModel = require('../lib/models/projects');
 const createSeriesModel = require('../lib/models/series');
 const createTasksModel = require('../lib/models/tasks');
 const createPeopleModel = require('../lib/models/people');
-const createUsersModel = require('../lib/models/users');
 const createRolesModel = require('../lib/models/roles');
 const createDataModel = require('../lib/models/state');
 const createAchievementsModel = require('../lib/models/achievements');
-const { managerCanEditProject, sanitizeProjectForManager, managerCanWriteTask } = require('../lib/project-access');
-
-function isFullAccessRole(role) {
-  return role === "admin" || role === "lead" || role === "manager";
-}
+const { sanitizeProjectForManager } = require('../lib/project-access');
+const { PERMISSIONS } = require('../lib/policy');
 module.exports = function registerDataRoutes(app, pool, deps) {
   var requireAuth = deps.requireAuth;
-  var requireRole = deps.requireRole;
-  var blockNA = deps.blockNA;
-  var requireWrite = deps.requireWrite;
-  var checkProjectAccess = deps.checkProjectAccess;
+  var requirePermission = deps.requirePermission;
+  var policy = deps.policy;
   var broadcast = deps.broadcast;
 
   function notify(req,event){ event.clientId=event.clientId||'server'; if(req._afterCommit) req._afterCommit.push(()=>broadcast(event)); else broadcast(event); }
@@ -43,11 +37,10 @@ var Roles = createRolesModel(pool);
   // API routes
 
   // GET /api/data
-  app.get("/api/data", requireAuth, blockNA, withTransaction(pool,async function(req, res) {
+  app.get("/api/data", requireAuth, requirePermission(PERMISSIONS.POST_READ), withTransaction(pool,async function(req, res) {
     try {
-      var allowedProjects = null;
-      if (!isFullAccessRole(req.session.role)) {
-        allowedProjects = await createUsersModel(req._tx).getProjects(req.session.userId, false);
+      var allowedProjects = await policy.projectScope(req.session, false, req._tx);
+      if (allowedProjects !== null) {
         if (!allowedProjects.length) {
           const revision=await req._tx.query("SELECT value FROM app_state WHERE key='revision' FOR SHARE");
           return res.json({ projects:[], series:[], tasks:[], people:[], roles:[], stages:[], stageGroups:[], holidays:[], achievements:[], personAbsences:[], templates:[], changelog:[], _savedAt:Date.now(), _clientId:"", _revision:Number(revision.rows[0]?.value||0) });
@@ -87,12 +80,12 @@ var Roles = createRolesModel(pool);
   }
 
   // Bulk saves are validated, permission-scoped and committed atomically.
-  app.all('/api/data', requireAuth, blockNA, requireWrite, validate(bulkSchema), withDataTransaction(pool, async function(req,res) {
+  app.all('/api/data', requireAuth, requirePermission(PERMISSIONS.POST_WRITE), validate(bulkSchema), withDataTransaction(pool, async function(req,res) {
     if (!['POST','PUT'].includes(req.method)) return res.status(405).json({error:'Method not allowed'});
     const data=req.body;
-    await protectBulk(req._tx,data,req);
+    await protectBulk(req._tx,data,req,policy);
     await Data.syncAll(data,req._tx,req.session.userId);
-    const allowed=isFullAccessRole(req.session.role)?null:await createUsersModel(req._tx).getProjects(req.session.userId,false);
+    const allowed=await policy.projectScope(req.session,false,req._tx);
     const result=await Data.loadAll(allowed,req.session.userId,req._tx);
     result._clientId=req.headers['x-client-id']||'';
     notify(req,{clientId:result._clientId});
@@ -102,16 +95,13 @@ var Roles = createRolesModel(pool);
   // API routes
 
   // POST project
-  app.post("/api/data/project", requireAuth, blockNA, requireWrite, validate(projectSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/project", requireAuth, requirePermission(PERMISSIONS.POST_WRITE), validate(projectSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var p = await sanitizeProjectForManager(req._tx, req, req.body);
       if (!p) return res.status(403).json({ error: "No project edit rights" });
-      if (req.session.role === "editor") {
-        var existingProject = await req._tx.query("SELECT id FROM projects WHERE id=$1 AND (deleted != true OR deleted IS NULL)", [p.id]);
-        if (!existingProject.rows.length) return res.status(403).json({ error: "No project create rights" });
-        var canEditProject = await checkProjectAccess(req.session.userId, "editor", p.id, true);
-        if (!canEditProject) return res.status(403).json({ error: "No edit rights" });
-      }
+      var existingProject = await req._tx.query("SELECT id FROM projects WHERE id=$1 AND (deleted != true OR deleted IS NULL)", [p.id]);
+      if (!existingProject.rows.length && !(await policy.can(req.session, PERMISSIONS.POST_PROJECT_CREATE))) return res.status(403).json({ error: "No project create rights" });
+      if (existingProject.rows.length && !(await policy.can(req.session, PERMISSIONS.POST_PROJECT_EDIT, {projectId:p.id,query:req._tx}))) return res.status(403).json({ error: "No edit rights" });
       await Projects.upsert(req._tx, p);
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "project", id: p.id });
       res.json({ ok: true });
@@ -122,7 +112,7 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE project
-  app.delete("/api/data/project/:id", requireAuth, blockNA, requireRole("admin","lead"), withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/project/:id", requireAuth, requirePermission(PERMISSIONS.POST_STRUCTURE_DELETE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
       await Projects.softDelete(req._tx, id);
@@ -137,16 +127,12 @@ var Roles = createRolesModel(pool);
   }));
 
   // POST series
-  app.post("/api/data/series", requireAuth, blockNA, requireWrite, validate(seriesSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/series", requireAuth, requirePermission(PERMISSIONS.POST_WRITE), validate(seriesSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var s = req.body;
-      if (req.session.role === "manager" && !(await managerCanEditProject(req._tx, req, s.projectId))) return res.status(403).json({ error: "No project edit rights" });
-      if (req.session.role === "editor" && s.projectId) {
-        var canEdit = await checkProjectAccess(req.session.userId, "editor", s.projectId, true);
-        if (!canEdit) return res.status(403).json({ error: "No edit rights" });
-      }
+      if (s.projectId && !(await policy.can(req.session, PERMISSIONS.POST_PROJECT_EDIT, {projectId:s.projectId,query:req._tx}))) return res.status(403).json({ error: "No edit rights" });
       const oldPid=await Series.getProjectId(req._tx,s.id);
-      if(oldPid && !(await checkProjectAccess(req.session.userId,req.session.role,oldPid,true))) return res.status(403).json({error:'No edit rights'});
+      if(oldPid && !(await policy.can(req.session,PERMISSIONS.POST_PROJECT_EDIT,{projectId:oldPid,query:req._tx}))) return res.status(403).json({error:'No edit rights'});
       await Series.upsert(req._tx, s);
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "series", id: s.id });
       res.json({ ok: true });
@@ -157,7 +143,7 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE series
-  app.delete("/api/data/series/:id", requireAuth, blockNA, requireRole("admin","lead"), withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/series/:id", requireAuth, requirePermission(PERMISSIONS.POST_STRUCTURE_DELETE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
       await Series.softDelete(req._tx, id);
@@ -171,16 +157,12 @@ var Roles = createRolesModel(pool);
   }));
 
   // POST task
-  app.post("/api/data/task", requireAuth, blockNA, requireWrite, validate(taskSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/task", requireAuth, requirePermission(PERMISSIONS.POST_WRITE), validate(taskSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var t = req.body;
-      if (!(await managerCanWriteTask(req._tx, req, t))) return res.status(403).json({ error: "No project edit rights" });
-      if (req.session.role === "editor" && t.project) {
-        var canEdit = await checkProjectAccess(req.session.userId, "editor", t.project, true);
-        if (!canEdit) return res.status(403).json({ error: "No edit rights" });
-      }
+      if (t.project && !(await policy.can(req.session, PERMISSIONS.POST_PROJECT_EDIT, {projectId:t.project,query:req._tx}))) return res.status(403).json({ error: "No edit rights" });
       const oldPid=await Tasks.getProjectId(req._tx,t.id);
-      if(oldPid && !(await checkProjectAccess(req.session.userId,req.session.role,oldPid,true))) return res.status(403).json({error:'No edit rights'});
+      if(oldPid && !(await policy.can(req.session,PERMISSIONS.POST_PROJECT_EDIT,{projectId:oldPid,query:req._tx}))) return res.status(403).json({error:'No edit rights'});
       if(t.seriesId){const seriesPid=await Series.getProjectId(req._tx,t.seriesId);if(seriesPid!==t.project)return res.status(400).json({error:'Series belongs to another project'});}
       const parent=await req._tx.query("SELECT id FROM projects WHERE id=$1 AND deleted IS NOT TRUE",[t.project]);
       if(!parent.rows.length)return res.status(400).json({error:"Project does not exist"});
@@ -198,18 +180,11 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE task
-  app.delete("/api/data/task/:id", requireAuth, blockNA, requireWrite, withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/task/:id", requireAuth, requirePermission(PERMISSIONS.POST_WRITE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
-      if (req.session.role === "manager") {
-        var managerPid = await Tasks.getProjectId(req._tx, id);
-        if (managerPid && !(await managerCanEditProject(req._tx, req, managerPid))) return res.status(403).json({ error: "No project edit rights" });
-      }
-      if (req.session.role === "editor") {
-        var pid = await Tasks.getProjectId(req._tx, id);
-        if (pid && !(await checkProjectAccess(req.session.userId, "editor", pid, true)))
-          return res.status(403).json({ error: "No edit rights" });
-      }
+      var pid = await Tasks.getProjectId(req._tx, id);
+      if (pid && !(await policy.can(req.session, PERMISSIONS.POST_PROJECT_EDIT, {projectId:pid,query:req._tx}))) return res.status(403).json({ error: "No edit rights" });
       await Tasks.softDelete(req._tx, id);
       notify(req,{ clientId: req.headers["x-client-id"] || "", type: "task-delete", id: id });
       res.json({ ok: true });
@@ -220,10 +195,10 @@ var Roles = createRolesModel(pool);
   }));
 
   // POST person
-  app.post("/api/data/person", requireAuth, blockNA, requireRole("admin","lead"), validate(personSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/person", requireAuth, requirePermission(PERMISSIONS.POST_DIRECTORY_WRITE), validate(personSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var pr = req.body;
-      if (req.session.role !== "admin") {
+      if (!(await policy.can(req.session, PERMISSIONS.POST_BIRTHDAY_WRITE))) {
         var existing = await req._tx.query("SELECT birthday FROM people WHERE id=$1", [pr.id]);
         pr.birthday = existing.rows[0] ? (existing.rows[0].birthday || '') : '';
       }
@@ -237,7 +212,7 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE person
-  app.delete("/api/data/person/:id", requireAuth, blockNA, requireRole("admin","lead"), withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/person/:id", requireAuth, requirePermission(PERMISSIONS.POST_DIRECTORY_WRITE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
       await People.softDelete(req._tx, id);
@@ -251,7 +226,7 @@ var Roles = createRolesModel(pool);
 
 
   // POST role
-  app.post("/api/data/role", requireAuth, blockNA, requireRole("admin","lead"), validate(roleSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/role", requireAuth, requirePermission(PERMISSIONS.POST_DIRECTORY_WRITE), validate(roleSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var r = req.body;
       await Roles.upsert(req._tx, r);
@@ -264,7 +239,7 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE role
-  app.delete("/api/data/role/:id", requireAuth, blockNA, requireRole("admin","lead"), withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/role/:id", requireAuth, requirePermission(PERMISSIONS.POST_DIRECTORY_WRITE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
       await Roles.softDelete(req._tx, id);
@@ -278,7 +253,7 @@ var Roles = createRolesModel(pool);
 
 
   // POST achievement
-  app.post("/api/data/achievement", requireAuth, blockNA, requireRole("admin"), validate(achievementSchema), withDataTransaction(pool, async function(req, res) {
+  app.post("/api/data/achievement", requireAuth, requirePermission(PERMISSIONS.POST_ACHIEVEMENT_WRITE), validate(achievementSchema), withDataTransaction(pool, async function(req, res) {
     try {
       var a = req.body;
       await Achievements.upsert(req._tx, a);
@@ -291,7 +266,7 @@ var Roles = createRolesModel(pool);
   }));
 
   // DELETE achievement
-  app.delete("/api/data/achievement/:id", requireAuth, blockNA, requireRole("admin"), withDataTransaction(pool, async function(req, res) {
+  app.delete("/api/data/achievement/:id", requireAuth, requirePermission(PERMISSIONS.POST_ACHIEVEMENT_WRITE), withDataTransaction(pool, async function(req, res) {
     try {
       var id = req.params.id;
       await Achievements.remove(req._tx, id);
@@ -304,5 +279,5 @@ var Roles = createRolesModel(pool);
   }));
 
   // SSE
-  app.get("/api/events", requireAuth, blockNA, deps.handleSSE);
+  app.get("/api/events", requireAuth, requirePermission(PERMISSIONS.POST_READ), deps.handleSSE);
 };

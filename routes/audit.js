@@ -1,4 +1,5 @@
 const ACTIONS = ['create','update','assign','reschedule','cancel','restore','delete'];
+const { PERMISSIONS } = require('../lib/policy');
 
 function integer(value, fallback, min, max) {
   const parsed = Number(value);
@@ -15,24 +16,10 @@ function isoDate(value, endOfDay) {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString();
 }
 
-async function managerProjects(pool, req) {
-  const values = [req.session.userId, req.session.samName, req.session.displayName, req.session.email]
-    .map(function(value) { return String(value || '').trim().toLowerCase(); }).filter(Boolean);
-  if (!values.length) return [];
-  const rows = await pool.query(
-    `SELECT DISTINCT project_id FROM project_managers
-     WHERE lower(coalesce(user_uid,''))=ANY($1::text[])
-        OR lower(coalesce(user_name,''))=ANY($1::text[])`, [values]
-  );
-  return rows.rows.map(function(row) { return row.project_id; });
-}
-
 module.exports = function registerAuditRoutes(app, pool, deps) {
-  app.get('/api/audit/events', deps.requireAuth, deps.blockNA, async function(req, res, next) {
+  app.get('/api/audit/events', deps.requireAuth, deps.requirePermission(PERMISSIONS.AUDIT_VIEW), async function(req, res, next) {
     try {
-      if (!['admin','lead','manager'].includes(req.session.role)) {
-        return res.status(403).json({error:'Недостаточно прав для просмотра истории'});
-      }
+      const access = await deps.policy.auditScope(req.session);
 
       const page = integer(req.query.page, 1, 1, 1000000);
       const pageSize = integer(req.query.pageSize, 50, 10, 100);
@@ -40,9 +27,10 @@ module.exports = function registerAuditRoutes(app, pool, deps) {
       const params = [];
       function add(sql, value) { params.push(value); where.push(sql.replace('?', '$' + params.length)); }
 
-      if (req.session.role === 'manager') {
-        const projects = await managerProjects(pool, req);
-        add('a.project_id=ANY(?::text[])', projects);
+      if (access.projectIds !== null) {
+        add('a.project_id=ANY(?::text[])', access.projectIds);
+      }
+      if (!access.includeRestricted) {
         where.push("a.visibility='standard'");
       }
       if (req.query.projectId) add('a.project_id=?', String(req.query.projectId));
@@ -74,10 +62,11 @@ module.exports = function registerAuditRoutes(app, pool, deps) {
 
       const actorParams = [];
       const actorWhere = [];
-      if (req.session.role === 'manager') {
-        const projects = await managerProjects(pool, req);
-        actorParams.push(projects);
+      if (access.projectIds !== null) {
+        actorParams.push(access.projectIds);
         actorWhere.push('project_id=ANY($1::text[])');
+      }
+      if (!access.includeRestricted) {
         actorWhere.push("visibility='standard'");
       }
       const actors = (await pool.query(

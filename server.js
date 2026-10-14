@@ -13,6 +13,7 @@ const { initPool, ensureAuditTable } = require("./lib/db");
 const { runMigrations } = require("./lib/migrate");
 const createLDAP   = require("./lib/ldap");
 const createRBAC   = require("./lib/rbac");
+const { createPolicy } = require("./lib/policy");
 const createSSE    = require("./lib/sse");
 const registerDataRoutes = require("./routes/data");
 const { captureAuditState, recordStateChanges } = require("./lib/audit");
@@ -155,8 +156,9 @@ var ldapMod = LOCAL_DEMO_MODE ? {
   initialRoleFromGroups: function() { return 'viewer'; },
 } : createLDAP(pool, ldapConfig);
 
-// RBAC module
-var rbac = createRBAC(pool);
+// Central policy is shared by legacy RBAC middleware and all route modules.
+var policy = createPolicy(pool);
+var rbac = createRBAC(pool, policy);
 
 // SSE module
 var sse = createSSE();
@@ -226,10 +228,10 @@ app.use(function(req, res, next) {
 
 app.get('/api/runtime', function(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.3.0' : '' });
+  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.4.0' : '' });
 });
 app.get('/runtime-config.js', function(req, res) {
-  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.3.0' : '' };
+  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.4.0' : '' };
   res.setHeader('Cache-Control', 'no-store');
   res.type('application/javascript').send('window.__TRACKER_RUNTIME__=' + JSON.stringify(runtime) + ';');
 });
@@ -271,6 +273,8 @@ registerDataRoutes(app, pool, {
   requireWrite: rbac.requireWrite,
   getUserProjects: rbac.getUserProjects,
   checkProjectAccess: rbac.checkProjectAccess,
+  requirePermission: rbac.requirePermission,
+  policy: policy,
   broadcast: sse.broadcast,
   handleSSE: sse.handleSSE,
   loginLimiter: loginLimiter,

@@ -21,6 +21,7 @@ const serverJs = read("server.js");
 const routesDataJs = read("routes/data.js");
 const routesAuthJs = read("routes/auth.js");
 const routeSchemasJs = read("routes/schemas.js");
+const policyJs = read("lib/policy.js");
 const serverRouteSources = routesDataJs + "\n" + routesAuthJs;
 const ldapJs = read("lib/ldap.js");
 const packageJson = JSON.parse(read("package.json"));
@@ -86,13 +87,15 @@ if (!/SINGLE_SESSION_PER_USER/.test(serverJs) || !/if \(singleSessionPerUser\) a
 if (!/login:\s*z\.string\(\)\.min\(1\)\.max\(100\)\.regex/.test(routeSchemasJs)) {
   fail("login input must be constrained before LDAP usage");
 }
-if (!/app\.get\(["']\/api\/users["'][\s\S]*requireRole\(["']admin["'],\s*["']lead["'],\s*["']manager["']\)/.test(routesAuthJs)) {
+if (!/app\.get\(["']\/api\/users["'],\s*requireAuth,\s*requirePermission\(PERMISSIONS\.USERS_LIST\)/.test(routesAuthJs) ||
+    !/manager:[\s\S]*PERMISSIONS\.USERS_LIST/.test(policyJs)) {
   fail("GET /api/users must be restricted to admin/lead/manager");
 }
-if (!/app\.put\(["']\/api\/users\/:id\/role["'][\s\S]*requireRole\(["']admin["']\)/.test(routesAuthJs)) {
+if (!/app\.put\(["']\/api\/users\/:id\/role["'],\s*requireAuth,\s*requirePermission\(PERMISSIONS\.USERS_MANAGE\)/.test(routesAuthJs) ||
+    !/admin:[\s\S]*PERMISSIONS\.USERS_MANAGE/.test(policyJs)) {
   fail("role changes must be admin-only");
 }
-if (!/app\.put\(["']\/api\/users\/:id\/projects["'][\s\S]*requireRole\(["']admin["']\)/.test(routesAuthJs)) {
+if (!/app\.put\(["']\/api\/users\/:id\/projects["'],\s*requireAuth,\s*requirePermission\(PERMISSIONS\.USERS_MANAGE\)/.test(routesAuthJs)) {
   fail("project access changes must be admin-only");
 }
 if (!/No project create rights/.test(routesDataJs)) {

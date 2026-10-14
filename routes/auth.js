@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { withTransaction } = require('../lib/db');
 const { auditMutation } = require('../lib/audit');
 const createUsersModel = require('../lib/models/users');
+const { PERMISSIONS } = require('../lib/policy');
 const { loginSchema, validate } = require('./schemas');
 
 function regenerateSession(req) {
@@ -20,8 +21,7 @@ function ensureCsrfToken(req) {
 
 module.exports = function registerAuthRoutes(app, pool, deps) {
   var requireAuth = deps.requireAuth;
-  var requireRole = deps.requireRole;
-  var blockNA = deps.blockNA;
+  var requirePermission = deps.requirePermission;
   var loginLimiter = deps.loginLimiter;
   var syncADUser = deps.syncADUser;
   var syncAllADUsers = deps.syncAllADUsers;
@@ -71,7 +71,7 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
 
   // API routes
 
-  app.get("/api/users", requireAuth, blockNA, requireRole("admin", "lead", "manager"), async function(req, res) {
+  app.get("/api/users", requireAuth, requirePermission(PERMISSIONS.USERS_LIST), async function(req, res) {
     try {
       var rows = await Users.findAll();
       res.json(rows);
@@ -81,7 +81,7 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
     }
   });
 
-  app.get("/api/users/domain", requireAuth, blockNA, requireRole("admin", "lead", "manager"), async function(req, res) {
+  app.get("/api/users/domain", requireAuth, requirePermission(PERMISSIONS.USERS_LIST), async function(req, res) {
     try {
       if (!listADUsers) return res.status(501).json({ error: "Domain listing is not configured" });
       var rows = await listADUsers();
@@ -92,7 +92,7 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
     }
   });
 
-  app.put("/api/users/:id/role", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
+  app.put("/api/users/:id/role", requireAuth, requirePermission(PERMISSIONS.USERS_MANAGE), withTransaction(pool, async function(req, res) {
     try {
       var valid = ["admin","lead","manager","editor","viewer","na"];
       if (valid.indexOf(req.body.role) === -1) return res.status(400).json({ error: "Invalid role" });
@@ -105,7 +105,7 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
     }
   }));
 
-  app.put("/api/users/:id/projects", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
+  app.put("/api/users/:id/projects", requireAuth, requirePermission(PERMISSIONS.USERS_MANAGE), withTransaction(pool, async function(req, res) {
     try {
       await auditMutation(req, ['userProject'], function() {
         return Users.setProjectsTx(req._tx, req.params.id, req.body.projects || [], req.session.userId);
@@ -117,7 +117,7 @@ module.exports = function registerAuthRoutes(app, pool, deps) {
     }
   }));
 
-  app.post("/api/users/sync", requireAuth, blockNA, requireRole("admin"), withTransaction(pool, async function(req, res) {
+  app.post("/api/users/sync", requireAuth, requirePermission(PERMISSIONS.USERS_MANAGE), withTransaction(pool, async function(req, res) {
     try {
       var count = await auditMutation(req, ['user'], function() { return syncAllADUsers(req._tx); }, {source:'automation',bulk:true});
       res.json({ ok: true, synced: count });
