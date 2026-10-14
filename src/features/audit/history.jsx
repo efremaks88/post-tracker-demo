@@ -1,5 +1,5 @@
-const AUDIT_ACTION_LABELS={create:"Создано",update:"Изменено",assign:"Изменён исполнитель",reschedule:"Перенесено",cancel:"Отменено",restore:"Восстановлено",delete:"Удалено"};
-const AUDIT_ENTITY_LABELS={project:"Проект",series:"Серия",task:"Смена",person:"Сотрудник",role:"Роль",stage:"Этап",stageGroup:"Группа этапов",holiday:"Выходной",achievement:"Достижение",absence:"Отсутствие",settings:"Настройка",user:"Пользователь",userProject:"Доступ к проекту"};
+const AUDIT_ACTION_LABELS={create:"Создано",update:"Изменено",assign:"Изменён исполнитель",reschedule:"Перенесено",cancel:"Отменено",restore:"Восстановлено",delete:"Удалено",save:"Сохранено"};
+const AUDIT_ENTITY_LABELS={project:"Проект",series:"Серия",task:"Смена",person:"Сотрудник",role:"Роль",stage:"Этап",stageGroup:"Группа этапов",holiday:"Выходной",achievement:"Достижение",absence:"Отсутствие",settings:"Настройка",user:"Пользователь",userProject:"Доступ к проекту",bulk:"Массовое изменение"};
 const AUDIT_FIELD_LABELS={name:"Название",label:"Название",title:"Название",person:"Исполнитель",status:"Этап",day:"Дата",from:"Начало",to:"Окончание",project_id:"Проект",series_id:"Серия",cancelled:"Отмена",deleted:"Удаление",role:"Роль",can_view:"Просмотр",can_edit:"Редактирование",date:"Дата",edit_start:"Начало монтажа",pre_otk_date:"ПредОТК",otk_date:"ОТК",send_date:"Отправка",air_date:"Эфир",manual_status:"Статус серии",managers:"Ответственные",note:"Заметка",notes:"Заметки"};
 
 function auditValue(value){

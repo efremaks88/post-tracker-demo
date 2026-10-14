@@ -2052,8 +2052,26 @@ async function csrfFetch(url, options) {
     ...(options || {})
   };
   const method = (opts.method || "GET").toUpperCase();
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) opts.headers = csrfHeaders(opts.headers);
-  return fetch(url, opts);
+  const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+  if (isWrite) opts.headers = csrfHeaders(opts.headers);
+  let response = await fetch(url, opts);
+  if (!isWrite || response.status !== 403) return response;
+  let problem = {};
+  try {
+    problem = await response.clone().json();
+  } catch (e) {}
+  if (problem.error !== "Invalid CSRF token") return response;
+  const sessionResponse = await fetch(SERVER_URL + "/api/auth/me", {
+    credentials: "include",
+    cache: "no-store"
+  });
+  if (!sessionResponse.ok) return response;
+  const session = await sessionResponse.json();
+  if (!session.csrfToken) return response;
+  setCsrfToken(session.csrfToken);
+  opts.headers = csrfHeaders(opts.headers);
+  response = await fetch(url, opts);
+  return response;
 }
 async function cloudLoad() {
   const res = await fetch(SERVER_URL + "/api/data", {
@@ -12751,7 +12769,8 @@ const AUDIT_ACTION_LABELS = {
   reschedule: "Перенесено",
   cancel: "Отменено",
   restore: "Восстановлено",
-  delete: "Удалено"
+  delete: "Удалено",
+  save: "Сохранено"
 };
 const AUDIT_ENTITY_LABELS = {
   project: "Проект",
@@ -12766,7 +12785,8 @@ const AUDIT_ENTITY_LABELS = {
   absence: "Отсутствие",
   settings: "Настройка",
   user: "Пользователь",
-  userProject: "Доступ к проекту"
+  userProject: "Доступ к проекту",
+  bulk: "Массовое изменение"
 };
 const AUDIT_FIELD_LABELS = {
   name: "Название",
@@ -19394,14 +19414,27 @@ function App() {
       color: "#fde68a",
       background: "#422006"
     }
-  }, syncError, " \u0418\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u043C.", React.createElement("button", {
-    className: "ppt-btn",
+  }, React.createElement("span", {
+    style: {
+      marginRight: 10
+    }
+  }, syncError, " \u0418\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u043E\u043A\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u044B \u0441\u0435\u0440\u0432\u0435\u0440\u043E\u043C."), React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      gap: 6,
+      flexWrap: "wrap"
+    }
+  }, React.createElement(Btn, {
+    variant: "warn",
+    small: true,
     onClick: () => doSave(rawData)
-  }, "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0435"), React.createElement("button", {
-    className: "ppt-btn",
+  }, "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0435"), React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
     onClick: () => exportJSON(rawData)
-  }, "\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043C\u043E\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F"), React.createElement("button", {
-    className: "ppt-btn",
+  }, "\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u043C\u043E\u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F"), React.createElement(Btn, {
+    variant: "ghost",
+    small: true,
     disabled: Boolean(saveTimer.current || ((_saveQueueRef$current5 = saveQueueRef.current) === null || _saveQueueRef$current5 === void 0 ? void 0 : _saveQueueRef$current5.pending)),
     onClick: () => {
       if (window.confirm("Загрузить данные сервера? Сначала скачайте свои несохранённые изменения, если они нужны.")) cloudLoad().then(d => {
@@ -19415,7 +19448,7 @@ function App() {
         setSyncState("ok");
       }).catch(e => setSyncError(e.message));
     }
-  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435")), React.createElement("div", {
+  }, "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435"))), React.createElement("div", {
     className: "ppt-main-content",
     style: {
       padding: "22px 20px 20px"

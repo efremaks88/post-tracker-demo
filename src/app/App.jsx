@@ -525,10 +525,12 @@ function App(){
 
 
       {syncError&&<div role="alert" style={{margin:"12px 20px 0",padding:12,border:"1px solid #b45309",borderRadius:10,color:"#fde68a",background:"#422006"}}>
-        {syncError} Изменения пока не подтверждены сервером.
-        <button className="ppt-btn" onClick={()=>doSave(rawData)}>Повторить сохранение</button>
-        <button className="ppt-btn" onClick={()=>exportJSON(rawData)}>Скачать мои изменения</button>
-        <button className="ppt-btn" disabled={Boolean(saveTimer.current||saveQueueRef.current?.pending)} onClick={()=>{if(window.confirm("Загрузить данные сервера? Сначала скачайте свои несохранённые изменения, если они нужны."))cloudLoad().then(d=>{serverRevisionRef.current=d._revision;histRef.current=[];pendingLogRef.current=[];logHistoryRef.current=d.changelog||[];unsavedRef.current=false;setRawData(d);setSyncError("");setSyncState("ok");}).catch(e=>setSyncError(e.message));}}>Загрузить актуальные данные</button>
+        <span style={{marginRight:10}}>{syncError} Изменения пока не подтверждены сервером.</span>
+        <span style={{display:"inline-flex",gap:6,flexWrap:"wrap"}}>
+          <Btn variant="warn" small onClick={()=>doSave(rawData)}>Повторить сохранение</Btn>
+          <Btn variant="ghost" small onClick={()=>exportJSON(rawData)}>Скачать мои изменения</Btn>
+          <Btn variant="ghost" small disabled={Boolean(saveTimer.current||saveQueueRef.current?.pending)} onClick={()=>{if(window.confirm("Загрузить данные сервера? Сначала скачайте свои несохранённые изменения, если они нужны."))cloudLoad().then(d=>{serverRevisionRef.current=d._revision;histRef.current=[];pendingLogRef.current=[];logHistoryRef.current=d.changelog||[];unsavedRef.current=false;setRawData(d);setSyncError("");setSyncState("ok");}).catch(e=>setSyncError(e.message));}}>Загрузить актуальные данные</Btn>
+        </span>
       </div>}
       <div className="ppt-main-content" style={{padding:"22px 20px 20px"}}>
         {navState?.type==="person"?(

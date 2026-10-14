@@ -118,8 +118,24 @@ function csrfHeaders(headers){
 async function csrfFetch(url, options){
   const opts = {...(options||{})};
   const method = (opts.method||"GET").toUpperCase();
-  if(["POST","PUT","PATCH","DELETE"].includes(method)) opts.headers = csrfHeaders(opts.headers);
-  return fetch(url, opts);
+  const isWrite=["POST","PUT","PATCH","DELETE"].includes(method);
+  if(isWrite) opts.headers = csrfHeaders(opts.headers);
+  let response=await fetch(url, opts);
+  if(!isWrite||response.status!==403) return response;
+  let problem={};
+  try{problem=await response.clone().json();}catch(e){}
+  if(problem.error!=="Invalid CSRF token") return response;
+
+  // A local server restart creates a new in-memory session. Refresh the token
+  // and repeat this write once so an already open browser tab keeps working.
+  const sessionResponse=await fetch(SERVER_URL+"/api/auth/me",{credentials:"include",cache:"no-store"});
+  if(!sessionResponse.ok) return response;
+  const session=await sessionResponse.json();
+  if(!session.csrfToken) return response;
+  setCsrfToken(session.csrfToken);
+  opts.headers=csrfHeaders(opts.headers);
+  response=await fetch(url,opts);
+  return response;
 }
 
 async function cloudLoad() {

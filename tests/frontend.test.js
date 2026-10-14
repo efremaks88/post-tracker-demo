@@ -173,6 +173,32 @@ test('save does not acknowledge failed server responses',async()=>{
   await assert.rejects(api.cloudSave({},'test'),/disk unavailable/);
 });
 
+test('save refreshes an expired CSRF token once and retries the write',async()=>{
+  const writeTokens=[];
+  let authReads=0;
+  api.setCsrfToken('stale-token');
+  context.fetch=async(url,options={})=>{
+    if(url==='/api/auth/me'){
+      authReads+=1;
+      return {ok:true,status:200,json:async()=>({csrfToken:'fresh-token'})};
+    }
+    writeTokens.push(options.headers['X-CSRF-Token']);
+    if(writeTokens.length===1){
+      return {
+        ok:false,
+        status:403,
+        clone:()=>({json:async()=>({error:'Invalid CSRF token'})}),
+        json:async()=>({error:'Invalid CSRF token'}),
+      };
+    }
+    return {ok:true,status:200,json:async()=>({data:{tasks:[],_revision:2}})};
+  };
+  const saved=await api.cloudSave({_revision:1},'test');
+  assert.equal(saved._revision,2);
+  assert.equal(authReads,1);
+  assert.deepEqual(writeTokens,['stale-token','fresh-token']);
+});
+
 test('weekly average uses only twelve weeks, excludes cancelled tasks and includes the first day',()=>{
   const end='11.10.2026';
   const start=api.addDays(end,-83);
