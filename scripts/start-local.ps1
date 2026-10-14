@@ -54,14 +54,66 @@ if ($requiredModules.Where({ -not (Test-Path -LiteralPath $_) }).Count -gt 0) {
 $env:LOCAL_DEMO_MODE = 'true'
 $env:NODE_ENV = 'development'
 $env:HOST = '127.0.0.1'
-$env:PORT = if ($env:POST_TRACKER_LOCAL_PORT) { $env:POST_TRACKER_LOCAL_PORT } else { '3080' }
 $env:COOKIE_SECURE = 'false'
-$url = 'http://127.0.0.1:' + $env:PORT
 
-$occupied = Get-NetTCPConnection -LocalPort ([int]$env:PORT) -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($occupied) {
-  throw ('Port ' + $env:PORT + ' is already in use. Close the other application or set POST_TRACKER_LOCAL_PORT to another port.')
+function Test-LoopbackPortAvailable {
+  param([int]$Port)
+
+  $listener = $null
+  try {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    return $true
+  } catch [System.Net.Sockets.SocketException] {
+    return $false
+  } finally {
+    if ($listener) { $listener.Stop() }
+  }
 }
+
+function Get-LocalTrackerRuntime {
+  param([string]$BaseUrl)
+
+  try {
+    $runtime = Invoke-RestMethod -Uri ($BaseUrl + '/api/runtime') -TimeoutSec 2
+    if ($runtime.mode -eq 'local-demo') { return $runtime }
+  } catch {}
+  return $null
+}
+
+$requestedPortText = if ($env:POST_TRACKER_LOCAL_PORT) { $env:POST_TRACKER_LOCAL_PORT } else { '3080' }
+$requestedPort = 0
+if (-not [int]::TryParse($requestedPortText, [ref]$requestedPort) -or $requestedPort -lt 1 -or $requestedPort -gt 65535) {
+  throw ('POST_TRACKER_LOCAL_PORT must be a number from 1 to 65535. Received: ' + $requestedPortText)
+}
+
+$selectedPort = $null
+$lastCandidatePort = [Math]::Min($requestedPort + 20, 65535)
+for ($candidate = $requestedPort; $candidate -le $lastCandidatePort; $candidate++) {
+  $candidateUrl = 'http://127.0.0.1:' + $candidate
+  if (Test-LoopbackPortAvailable -Port $candidate) {
+    $selectedPort = $candidate
+    break
+  }
+
+  $existingRuntime = Get-LocalTrackerRuntime -BaseUrl $candidateUrl
+  if ($existingRuntime) {
+    Write-Host ('POST TRACKER is already running at ' + $candidateUrl + ' (' + $existingRuntime.label + ').') -ForegroundColor Green
+    if ($env:POST_TRACKER_NO_BROWSER -ne 'true') { Start-Process $candidateUrl }
+    exit 0
+  }
+}
+
+if (-not $selectedPort) {
+  throw ('No free local port was found between ' + $requestedPort + ' and ' + $lastCandidatePort + '.')
+}
+
+if ($selectedPort -ne $requestedPort) {
+  Write-Host ('Port ' + $requestedPort + ' is used by another application. Using port ' + $selectedPort + ' instead.') -ForegroundColor Yellow
+}
+
+$env:PORT = [string]$selectedPort
+$url = 'http://127.0.0.1:' + $env:PORT
 
 Write-Host ('Starting POST TRACKER at ' + $url) -ForegroundColor Cyan
 $server = Start-Process -FilePath $nodeExe -ArgumentList @('server.js') -WorkingDirectory $repoRoot -NoNewWindow -PassThru
