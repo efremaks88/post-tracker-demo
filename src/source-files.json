@@ -5,5 +5,12 @@
   "src/shared/scheduling.jsx",
   "src/app/navigation-access.jsx",
   "src/components/forms.jsx",
+  "src/features/post/directory.jsx",
+  "src/features/post/projects.jsx",
+  "src/features/post/calendar.jsx",
+  "src/features/post/gantt.jsx",
+  "src/features/post/days.jsx",
+  "src/features/post/people.jsx",
+  "src/features/post/analytics.jsx",
   "src/index.jsx"
 ]
