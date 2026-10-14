@@ -1,0 +1,50 @@
+# Dependencies and generated test output
+node_modules/
+coverage/
+.nyc_output/
+*.log
+
+# Runtime configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Database dumps and backups
+backups/
+backup/
+*.dump
+*.backup
+*.pgdump
+*.sql.gz
+*.dump.gz
+*.backup.gz
+*.sqlite
+*.sqlite3
+
+# Local application state and scratch data
+state*.json
+*.local.json
+local-data/
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*.tmp
+*.bak
+*.orig
+*~
+.vscode/
+.idea/

@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-08-31T14:11:24.278Z",
+  "source": "sanitized copy from current working tree",
+  "excluded": [
+    ".git",
+    "node_modules",
+    ".agents",
+    ".codex",
+    "live database",
+    "internal docs",
+    "local wishlist",
+    "backup files"
+  ],
+  "notes": "Brand/infrastructure strings replaced with generic values where obvious."
+}
