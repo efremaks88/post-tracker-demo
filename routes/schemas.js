@@ -114,6 +114,34 @@ var stageSchema=roleSchema.extend({order:z.number().int(),groupId:z.string().def
 var absenceSchema=z.object({id:z.string().min(1),personId:z.string().default(''),personName:z.string().default(''),type:z.enum(['dayoff','vacation','sick','other']).default('dayoff'),startDay:z.string().refine(validDay),endDay:z.string().refine(validDay),note:z.string().max(1000).default(''),deleted:z.boolean().optional(),_updatedAt:z.number().optional(),updatedAt:z.string().optional()}).refine(a=>a.endDay.split('.').reverse().join('')>=a.startDay.split('.').reverse().join(''),{message:'Absence end precedes start',path:['endDay']});
 var bulkSchema=z.object({projects:z.array(projectSchema).optional(),series:z.array(seriesSchema).optional(),tasks:z.array(taskSchema).optional(),people:z.array(personSchema).optional(),roles:z.array(roleSchema).optional(),stages:z.array(stageSchema).optional(),stageGroups:z.array(z.object({id:z.string().min(1),label:z.string().min(1),order:z.number().int()})).optional(),holidays:z.array(z.string().refine(validDay)).optional(),achievements:z.array(achievementSchema).optional(),personAbsences:z.array(absenceSchema).optional(),templates:z.array(z.any()).optional(),changelog:z.array(z.any()).max(200).optional(),_clientId:z.string().optional(),_revision:z.number().int().min(0).optional()});
 
+var isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(function(value) {
+  return !Number.isNaN(Date.parse(value + 'T12:00:00Z'));
+}, 'Invalid date');
+var producerBlockSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(2000).default(''),
+  seriesId: z.string().trim().min(1).nullable().optional(),
+  ownerPersonId: z.string().trim().min(1),
+  deadline: isoDate.nullable().optional(),
+  status: z.enum(['planned','active','done','paused']).default('planned'),
+});
+var producerGroupSchema = z.object({name:z.string().trim().min(1).max(120)});
+var producerTaskSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  groupId: z.string().trim().min(1).nullable().optional(),
+  assigneePersonId: z.string().trim().min(1),
+  responsiblePersonId: z.string().trim().min(1).nullable().optional(),
+  deadline: isoDate.nullable().optional(),
+});
+var producerTaskUpdateSchema = z.object({
+  title: z.string().trim().min(1).max(300).optional(),
+  groupId: z.string().trim().min(1).nullable().optional(),
+  assigneePersonId: z.string().trim().min(1).optional(),
+  responsiblePersonId: z.string().trim().min(1).nullable().optional(),
+  deadline: isoDate.nullable().optional(),
+  completed: z.boolean().optional(),
+}).refine(function(value) { return Object.keys(value).length > 0; }, 'No changes supplied');
+
 bulkSchema=bulkSchema.superRefine((data,ctx)=>{
   for(const key of ['projects','series','tasks','people','roles','stages','stageGroups','achievements','personAbsences']){
     const ids=new Set();
@@ -143,4 +171,5 @@ function validate(schema) {
 module.exports = {
   projectSchema, seriesSchema, taskSchema, personSchema, achievementSchema,
   loginSchema, roleSchema, stageSchema, absenceSchema, bulkSchema, validate,
+  producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema,
 };

@@ -1,5 +1,6 @@
 function App(){
   const [rawData,setRawData]=useState(null);
+  const [workspace,setWorkspace]=useState(()=>String(window.location.hash||"").startsWith("#producer")?"producer":"post");
   const [view,setView]=useState("today");
   const [navState,setNavState]=useState(()=>parseHash());
   const [syncState,setSyncState]=useState("ok");
@@ -408,6 +409,14 @@ function App(){
     );
   }
 
+  if(workspace==="producer"&&canManage){
+    return <ProducerWorkspace user={user} data={data} onExit={()=>{
+      setWorkspace("post");
+      history.pushState(null,"",location.pathname+location.search);
+      setNavState(null);
+    }}/>;
+  }
+
   const TABS=[
     {id:"today",    label:"Сегодня"},
     {id:"projects", label:"Проекты"},
@@ -460,6 +469,7 @@ function App(){
             }[syncState]}
             <Btn variant="ghost" small onClick={()=>{setView("history");navigate(null);}}>📜 История</Btn>
             <Btn variant="ghost" small onClick={()=>setDayShiftsModal(true)}> Смены</Btn>
+            {canManage&&<Btn variant="ghost" small onClick={()=>{setWorkspace("producer");window.location.hash="producer";}}>Продюсерская →</Btn>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:8}}>
             <span style={{fontSize:12,color:"#cbd5e1",fontWeight:700}}>{user.display_name}</span>

@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.4.0'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.5.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -140,9 +140,17 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.4.0'));
+  assert.ok(mobile.includes('DEV · v0.5.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
+});
+test('producer workspace renders its light dashboard, project node and task row',()=>{
+  const dashboard=render('ProducerDashboardList',{title:'Мои задачи сегодня',icon:'✓',empty:'Пусто',rows:[],onOpen:noop});
+  assert.ok(dashboard.includes('Мои задачи сегодня'));assert.ok(dashboard.includes('Пусто'));
+  const node=render('ProducerBlockNode',{block:{id:'b',name:'Препродакшн',status:'active',ownerName:'Продюсер',deadline:'2026-10-20',completedTasks:1,totalTasks:3},onOpen:noop});
+  assert.ok(node.includes('Препродакшн'));assert.ok(node.includes('В работе'));
+  const taskRow=render('ProducerTaskRow',{task:{id:'t',title:'Утвердить синопсис',assigneePersonId:'p',assigneeName:'Продюсер',completed:false},people:[{id:'p',name:'Продюсер'}],onChange:noop});
+  assert.ok(taskRow.includes('Утвердить синопсис'));assert.ok(taskRow.includes('Продюсер'));
 });
 for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','HistoryView','DirectoryView']){
   test('empty data rendering: '+name,()=>{

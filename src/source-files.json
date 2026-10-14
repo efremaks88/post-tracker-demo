@@ -21,6 +21,7 @@
   "src/components/command-palette.jsx",
   "src/features/auth/index.jsx",
   "src/features/mobile/index.jsx",
+  "src/features/producer/index.jsx",
   "src/app/App.jsx",
   "src/index.jsx"
 ]

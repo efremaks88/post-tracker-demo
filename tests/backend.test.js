@@ -77,6 +77,11 @@ test('central permission matrix preserves current roles and denies future permis
     ],grants,role);
     for(const permission of FUTURE_PERMISSIONS) assert.equal(roleHasPermission(role,permission),false,role+' '+permission);
   }
+  for(const role of ['admin','lead','manager']){
+    assert.equal(roleHasPermission(role,PERMISSIONS.PRODUCER_READ),true,role);
+    assert.equal(roleHasPermission(role,PERMISSIONS.PRODUCER_WRITE),true,role);
+  }
+  for(const role of ['editor','viewer','na','unexpected'])assert.equal(roleHasPermission(role,PERMISSIONS.PRODUCER_READ),false,role);
 });
 test('central project and audit scopes enforce manager, editor and viewer boundaries',async()=>{
   await fixture();
@@ -102,7 +107,40 @@ test('route permissions keep user management and directories at their previous b
 });
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
-  assert.equal(first,13);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+  assert.equal(first,14);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+});
+
+test('producer vertical slice persists blocks, groups, assignments, completion and audit',async()=>{
+  await fixture();
+  await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1'});
+  await request('/api/data/person','POST',{id:'producer-b',name:'Продюсер Б'});
+  await pool.query('TRUNCATE audit_log RESTART IDENTITY');
+  const created=await request('/api/producer/projects/p/blocks','POST',{
+    name:'Препродакшн',description:'Подготовка проекта',seriesId:'s',ownerPersonId:'producer-a',deadline:'2026-10-20',status:'active',
+  });
+  assert.equal(created.status,200);assert.ok(created.body.id);
+  const blockId=created.body.id;
+  const group=await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Сценарий'});
+  assert.equal(group.status,200);assert.ok(group.body.id);
+  const taskCreated=await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Утвердить синопсис',groupId:group.body.id,assigneePersonId:'producer-a',deadline:'2026-10-18',
+  });
+  assert.equal(taskCreated.status,200);assert.ok(taskCreated.body.id);
+  assert.equal((await request('/api/producer/tasks/'+taskCreated.body.id,'PATCH',{assigneePersonId:'producer-b'})).status,200);
+  assert.equal((await request('/api/producer/tasks/'+taskCreated.body.id,'PATCH',{completed:true})).status,200);
+  const loaded=await request('/api/producer/blocks/'+blockId);
+  assert.equal(loaded.status,200);assert.equal(loaded.body.groups[0].name,'Сценарий');
+  assert.equal(loaded.body.tasks[0].assigneeName,'Продюсер Б');assert.equal(loaded.body.tasks[0].completed,true);
+  assert.ok(loaded.body.history.length>=5);
+  const audit=(await pool.query("SELECT entity,action,project_id FROM audit_log WHERE entity LIKE 'production%' ORDER BY id")).rows;
+  assert.deepEqual(audit.map(row=>row.action),['create','create','create','assign','complete']);
+  assert.ok(audit.every(row=>row.project_id==='p'));
+  const map=await request('/api/producer/projects/p');
+  assert.equal(map.body.blocks[0].completedTasks,1);assert.equal(map.body.blocks[0].totalTasks,1);
+  assert.equal((await request('/api/producer/dashboard')).body.projects.find(item=>item.id==='p').progress,100);
+  assert.equal((await request('/api/producer/projects/p','GET',undefined,4)).status,403);
+  assert.equal((await request('/api/producer/projects/p/blocks','POST',{name:'Блок менеджера',ownerPersonId:'producer-a'},3)).status,200);
+  assert.equal((await request('/api/producer/projects/other/blocks','POST',{name:'Чужой блок',ownerPersonId:'producer-a'},3)).status,403);
 });
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);

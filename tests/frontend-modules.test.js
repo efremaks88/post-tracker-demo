@@ -31,6 +31,7 @@ test('key screens and application concerns live in their own source modules', ()
     ['src/features/post/series-card.jsx', 'function SeriesCard('],
     ['src/features/auth/index.jsx', 'async function doLogin('],
     ['src/features/mobile/index.jsx', 'function MobileWorkspace('],
+    ['src/features/producer/index.jsx', 'function ProducerWorkspace('],
     ['src/app/App.jsx', 'function App('],
   ]);
   for (const [relativePath, signature] of expected) {

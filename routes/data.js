@@ -1,6 +1,7 @@
 const { projectSchema, seriesSchema, taskSchema, personSchema, achievementSchema, roleSchema, bulkSchema, validate } = require('./schemas');
 const registerAuthRoutes = require('./auth');
 const registerAuditRoutes = require('./audit');
+const registerProducerRoutes = require('./producer');
 const protectBulk = require('../lib/bulk-access');
 const { withTransaction } = require('../lib/db');
 const { ALL_ENTITIES, auditMutation } = require('../lib/audit');
@@ -33,6 +34,7 @@ var Roles = createRolesModel(pool);
 
   registerAuthRoutes(app, pool, deps);
   registerAuditRoutes(app, pool, deps);
+  registerProducerRoutes(app, pool, deps);
 
   // API routes
 
