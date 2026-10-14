@@ -1,3 +1,9 @@
 [
+  "src/shared/foundation.jsx",
+  "src/shared/client-data.jsx",
+  "src/components/project-visuals.jsx",
+  "src/shared/scheduling.jsx",
+  "src/app/navigation-access.jsx",
+  "src/components/forms.jsx",
   "src/index.jsx"
 ]
