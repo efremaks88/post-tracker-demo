@@ -12,5 +12,14 @@
   "src/features/post/days.jsx",
   "src/features/post/people.jsx",
   "src/features/post/analytics.jsx",
+  "src/components/overlays.jsx",
+  "src/features/post/person-card.jsx",
+  "src/features/post/today.jsx",
+  "src/features/post/series-card.jsx",
+  "src/features/post/project-card.jsx",
+  "src/components/command-palette.jsx",
+  "src/features/auth/index.jsx",
+  "src/features/mobile/index.jsx",
+  "src/app/App.jsx",
   "src/index.jsx"
 ]
