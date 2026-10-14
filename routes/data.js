@@ -11,6 +11,7 @@ const createUsersModel = require('../lib/models/users');
 const createRolesModel = require('../lib/models/roles');
 const createDataModel = require('../lib/models/state');
 const createAchievementsModel = require('../lib/models/achievements');
+const { containsSensitiveProjectInput } = require('../lib/project-secrets');
 
 // Zod schemas
 var projectSchema = z.object({
@@ -27,6 +28,14 @@ var projectSchema = z.object({
   deleted: z.boolean().optional(),
   _updatedAt: z.number().optional(),
   updatedAt: z.string().optional(),
+}).superRefine(function(project, ctx) {
+  if (containsSensitiveProjectInput(project)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dossier'],
+      message: 'Project credentials cannot be sent through the shared API',
+    });
+  }
 });
 
 var seriesSchema = z.object({

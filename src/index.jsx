@@ -493,12 +493,58 @@ const STORAGE_MODE = "server";
 //  Если разработка на отдельной машине — укажите, например: "http://192.168.1.50:3000"
 const SERVER_URL = "";
 const DATA_ARRAY_KEYS=["projects","series","tasks","people","roles","stages","stageGroups","holidays","achievements","personAbsences","templates","changelog"];
+const CLIENT_SECRET_KEY=/^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
+const CLIENT_ACCESS_SECRET_KEY=/^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
+function clientPlainObject(value){return value!==null&&typeof value==="object"&&!Array.isArray(value);}
+function clientMeaningfulValue(value){
+  if(value===null||value===undefined||value==="")return false;
+  if(Array.isArray(value))return value.some(clientMeaningfulValue);
+  if(clientPlainObject(value))return Object.values(value).some(clientMeaningfulValue);
+  return true;
+}
+function clientAccessHasCredential(access){
+  if(!clientPlainObject(access))return clientMeaningfulValue(access);
+  return Object.entries(access).some(([key,value])=>
+    (CLIENT_ACCESS_SECRET_KEY.test(key)&&clientMeaningfulValue(value))||
+    ((Array.isArray(value)||clientPlainObject(value))&&clientAccessHasCredential(value))
+  );
+}
+function sanitizeClientNode(value){
+  if(Array.isArray(value))return value.map(sanitizeClientNode);
+  if(!clientPlainObject(value))return value;
+  const safe={};
+  for(const [key,item] of Object.entries(value)){
+    if(key==="accesses"){
+      safe.accesses=Array.isArray(item)?item.map(access=>{
+        const entry={};
+        if(clientPlainObject(access)&&typeof access.id==="string")entry.id=access.id;
+        if(clientPlainObject(access)&&typeof access.label==="string")entry.label=access.label;
+        if(clientPlainObject(access)&&typeof access.name==="string"&&!entry.label)entry.label=access.name;
+        if(clientAccessHasCredential(access)||access?.credentialsStored===true)entry.credentialsStored=true;
+        return entry;
+      }).filter(entry=>entry.id||entry.label||entry.credentialsStored):[];
+    }else if(!CLIENT_SECRET_KEY.test(key))safe[key]=sanitizeClientNode(item);
+  }
+  return safe;
+}
+function sanitizeClientData(record){
+  const source=clientPlainObject(record)?record:{};
+  const safe={...source};
+  safe.projects=Array.isArray(source.projects)?source.projects.map(project=>({
+    ...project,dossier:sanitizeClientNode(clientPlainObject(project?.dossier)?project.dossier:{})
+  })):[];
+  return safe;
+}
 function normalizeLoadedData(record){
-  const result={...(record||{})};
+  const result=sanitizeClientData(record);
   DATA_ARRAY_KEYS.forEach(key=>{if(!Array.isArray(result[key]))result[key]=[];});
   return result;
 }
 function accountBackupKey(user){return "post_tracker_backup:"+String(user?.sam_name||user?.id||"anonymous");}
+function persistAccountBackup(user,data){
+  const safe=sanitizeClientData(data);
+  localStorage.setItem(accountBackupKey(user),JSON.stringify({ts:safe._savedAt,data:safe}));
+}
 function undoSnapshot(previous,current,now=Date.now()){
   const restored={...previous,_revision:current?._revision,changelog:current?.changelog||previous.changelog||[]};
   for(const key of SOFT_DELETE_KEYS){
@@ -568,13 +614,14 @@ async function cloudLoad() {
 }
 
 async function cloudSave(data, clientId) {
+  const safeData=sanitizeClientData(data);
   const headers = {"Content-Type": "application/json"};
   if (clientId) headers["x-client-id"] = clientId;
   const res = await csrfFetch(SERVER_URL + "/api/data", {
     method: "PUT",
     headers,
     credentials: "include",
-    body: JSON.stringify(data),
+    body: JSON.stringify(safeData),
   });
   if (!res.ok) {
     const problem=await res.json().catch(()=>({}));
@@ -643,8 +690,9 @@ function makeDemoData(){
     series:DEMO_SERIES, tasks, stages:DEFAULT_STAGES, holidays:DEFAULT_HOLIDAYS};
 }
 
+function serializeExportData(data){return JSON.stringify(sanitizeClientData(data),null,2);}
 function exportJSON(data){
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const blob=new Blob([serializeExportData(data)],{type:"application/json"});
   const a=document.createElement("a");
   const url=URL.createObjectURL(blob);
   a.href=url;
@@ -6166,7 +6214,6 @@ function ProjectCard({projectId,data,onUpdate,onBatchUpdate,onBack,onSeriesSelec
   const {sorted:stages,stageGroups,groupMap}=useContext(StagesCtx);
   const [tab,setTab]=useState("general");
   const [editSeries,setEditSeries]=useState(null);
-  const [showPwd,setShowPwd]=useState({});
   const kppDragRef=useRef(null);
 
   const proj=data.projects.find(p=>p.id===projectId);
@@ -6586,13 +6633,21 @@ function ProjectCard({projectId,data,onUpdate,onBatchUpdate,onBack,onSeriesSelec
 
       {tab==="access"&&(
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{background:"rgba(30,41,59,.72)",borderRadius:16,padding:20,border:"1px solid rgba(245,158,11,.35)"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fbbf24",marginBottom:8}}>Реквизиты доступа скрыты</div>
+            <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.6}}>
+              Сохранённые ранее логины, пароли и токены не передаются в приложение. До согласования переноса они остаются в исходной базе без изменений.
+            </div>
+            {(dossier.accesses||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:12}}>
+              {(dossier.accesses||[]).map((item,idx)=><span key={item.id||idx} style={{fontSize:11,color:"#cbd5e1",background:"#0f172a",border:"1px solid #334155",borderRadius:999,padding:"5px 9px"}}>
+                {item.label||`Запись ${idx+1}`}{item.credentialsStored?" · сохранено в защищённом контуре":""}
+              </span>)}
+            </div>}
+          </div>
           {[
             {key:"paths",title:"Пути на сервере",
               fields:[{k:"label",ph:"Название"},{k:"path",ph:"Путь"}],
               empty:{label:"",path:""}},
-            {key:"accesses",title:"Доступы",
-              fields:[{k:"label",ph:"Название"},{k:"login",ph:"Логин"},{k:"password",ph:"Пароль",pwd:true}],
-              empty:{label:"",login:"",password:""}},
             {key:"links",title:"Ссылки",
               fields:[{k:"label",ph:"Название"},{k:"url",ph:"URL"}],
               empty:{label:"",url:""}},
@@ -6607,12 +6662,10 @@ function ProjectCard({projectId,data,onUpdate,onBatchUpdate,onBack,onSeriesSelec
                 {items.length===0&&<div style={{color:"#475569",fontSize:12}}>Пусто</div>}
                 {items.map((item,idx)=>(
                   <div key={idx} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
-                    {fields.map(({k,ph,pwd})=>{
-                      const pwKey=`${key}-${idx}-${k}`;
-                      const shown=showPwd[pwKey];
+                    {fields.map(({k,ph})=>{
                       return (
                         <div key={k} style={{flex:1,position:"relative"}}>
-                          <input type={pwd&&!shown?"password":"text"}
+                          <input type="text"
                             defaultValue={item[k]||""} placeholder={ph} style={iSt}
                             onBlur={e=>{
                               if(e.target.value!==(item[k]||"")){
@@ -6620,13 +6673,6 @@ function ProjectCard({projectId,data,onUpdate,onBatchUpdate,onBack,onSeriesSelec
                                 upDoss(key,ni);
                               }
                             }}/>
-                          {pwd&&(
-                            <button onClick={()=>setShowPwd(p=>({...p,[pwKey]:!p[pwKey]}))}
-                              style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
-                                background:"none",border:"none",cursor:"pointer",color:"#475569",fontSize:14,padding:0}}>
-                              {shown?"":""}
-                            </button>
-                          )}
                         </div>
                       );
                     })}
@@ -7435,7 +7481,7 @@ function App(){
       unsavedRef.current=false;
       logHistoryRef.current=merged.changelog||[];
       setSyncState("ok");setSyncError("");setRawData(merged);
-      try{localStorage.setItem(accountBackupKey(backupAccountRef.current),JSON.stringify({ts:merged._savedAt,data:merged}));}catch(e){}
+      try{persistAccountBackup(backupAccountRef.current,merged);}catch(e){}
     },
     error=>{if(!saveTimer.current){setSyncState("error");setSyncError(error.message);}}
   );
@@ -7536,7 +7582,7 @@ function App(){
         // Если облако недоступно — пробуем локальный бэкап
         try{
           const raw=currentAccount?localStorage.getItem(accountBackupKey(currentAccount)):null;
-          if(raw){const bk=JSON.parse(raw);if(bk?.data){unsavedRef.current=true;serverRevisionRef.current=bk.data._revision??null;setRawData(normalizeLoadedData(bk.data));setSyncState("error");setSyncError("Открыта локальная копия. Связь с сервером недоступна.");return;}}
+          if(raw){const bk=JSON.parse(raw);if(bk?.data){const safeBackup=normalizeLoadedData(bk.data);persistAccountBackup(currentAccount,safeBackup);unsavedRef.current=true;serverRevisionRef.current=safeBackup._revision??null;setRawData(safeBackup);setSyncState("error");setSyncError("Открыта локальная копия. Связь с сервером недоступна.");return;}}
         }catch(e){}
         setRawData(normalizeLoadedData(null));
         setSyncState("error");
@@ -7578,13 +7624,13 @@ function App(){
     clearTimeout(saveTimer.current);
     setSyncState("saving");
     setSyncError("");
-    try{localStorage.setItem(accountBackupKey(user),JSON.stringify({ts:payload._savedAt,data:payload}));}catch(e){}
+    try{persistAccountBackup(user,payload);}catch(e){}
     saveTimer.current=setTimeout(()=>{
       saveTimer.current=null;
       const outgoing={...payload,changelog:mergeChangelog(pendingLogRef.current,logHistoryRef.current,payload.changelog)};
       logHistoryRef.current=outgoing.changelog;
       pendingLogRef.current=[];
-      try{localStorage.setItem(accountBackupKey(user),JSON.stringify({ts:outgoing._savedAt,data:outgoing}));}catch(e){}
+      try{persistAccountBackup(user,outgoing);}catch(e){}
       saveQueueRef.current.enqueue(outgoing);
     },1000);
   }

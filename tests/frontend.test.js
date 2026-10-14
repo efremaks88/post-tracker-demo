@@ -70,6 +70,26 @@ test('missing optional arrays do not break loading and employee filtering',()=>{
   assert.equal(api.filterPeopleByStatus([{id:'x',active:true}], 'монтаж',api.DEFAULT_STAGES).length,0);
   assert.notEqual(api.accountBackupKey({sam_name:'one'}),api.accountBackupKey({sam_name:'two'}));
 });
+test('client state, save payload and JSON export omit project credentials',async()=>{
+  const markers={login:'client-login-marker',password:'client-password-marker',token:'client-token-marker'};
+  const input={projects:[{id:'secure',name:'Secure',dossier:{
+    accesses:[{label:'Архив',login:markers.login,password:markers.password}],
+    integration:{label:'API',token:markers.token},notes:'Обычная заметка'
+  }}]};
+  const normalized=api.normalizeLoadedData(input);
+  const stateJson=JSON.stringify(normalized);
+  for(const marker of Object.values(markers))assert.equal(stateJson.includes(marker),false);
+  assert.equal(normalized.projects[0].dossier.notes,'Обычная заметка');
+  assert.deepEqual(JSON.parse(JSON.stringify(normalized.projects[0].dossier.accesses)),[{label:'Архив',credentialsStored:true}]);
+  assert.equal(input.projects[0].dossier.accesses[0].password,markers.password);
+
+  let sent;
+  context.fetch=async(url,request)=>{sent=request.body;return {ok:true,json:async()=>({data:{projects:[],_revision:1}})};};
+  await api.cloudSave(input,'client');
+  for(const marker of Object.values(markers))assert.equal(sent.includes(marker),false);
+  const exported=api.serializeExportData(input);
+  for(const marker of Object.values(markers))assert.equal(exported.includes(marker),false);
+});
 test('HTML spreadsheet export escapes user text',()=>{
   assert.equal(api.xlsEscape('<script>&"'),'&lt;script&gt;&amp;&quot;');
 });
@@ -111,6 +131,17 @@ test('desktop login and mobile show new branding and author credit',()=>{
   for(const name of ['LoginForm','MobileTopbar']){
     const html=render(name,shared);assert.ok(html.includes('ПОСТ ТРЕКЕР'));assert.ok(html.includes('Создано Максимом Ефремовым'));
   }
+});
+test('project access screen exposes only credential status metadata',()=>{
+  const secure=api.normalizeLoadedData({...data,projects:data.projects.map((project,index)=>index?project:{...project,dossier:{
+    ...(project.dossier||{}),accesses:[{label:'Архив',login:'render-login-marker',password:'render-password-marker'}]
+  }})});
+  const html=render('ProjectCard',{...shared,data:secure,projectId:secure.projects[0].id});
+  assert.ok(source.includes('Реквизиты доступа скрыты'));
+  assert.equal(source.includes('{k:"password"'),false);
+  assert.equal(html.includes('render-login-marker'),false);
+  assert.equal(html.includes('render-password-marker'),false);
+  assert.doesNotMatch(html,/type="password"/);
 });
 for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','DirectoryView']){
   test('empty data rendering: '+name,()=>{

@@ -214,6 +214,52 @@ test('private task notes are hidden from viewers and editors and survive their e
   assert.equal((await request('/api/data')).body.tasks[0].note,'private');
 });
 
+test('project credentials are absent for every application role and survive safe saves',async()=>{
+  await fixture();
+  const markers={login:'credential-login-marker',password:'credential-password-marker',token:'credential-token-marker'};
+  const stored={
+    info:{type:'Документальный'},
+    accesses:[{label:'Монтажная станция',login:markers.login,password:markers.password}],
+    integration:{label:'Служебная интеграция',token:markers.token},
+    links:[{label:'Материалы',url:'https://example.test/materials'}],
+  };
+  await pool.query('UPDATE projects SET dossier=$2::jsonb WHERE id=$1',['p',JSON.stringify(stored)]);
+
+  for(const user of [1,2,3,4,5]){
+    const loaded=(await request('/api/data','GET',undefined,user)).body;
+    const json=JSON.stringify(loaded);
+    for(const marker of Object.values(markers))assert.equal(json.includes(marker),false);
+    const visible=loaded.projects.find(item=>item.id==='p');
+    assert.equal(visible.dossier.info.type,'Документальный');
+    assert.deepEqual(visible.dossier.accesses,[{label:'Монтажная станция',credentialsStored:true}]);
+    assert.equal(visible.dossier.integration.token,undefined);
+  }
+
+  const snapshot=(await request('/api/data')).body;
+  snapshot.projects.find(item=>item.id==='p').description='Безопасная правка';
+  assert.equal((await request('/api/data','PUT',snapshot)).status,200);
+  const direct=(await request('/api/data')).body.projects.find(item=>item.id==='p');
+  direct.name='Обновлённый проект';
+  assert.equal((await request('/api/data/project','POST',direct)).status,200);
+
+  const raw=(await pool.query('SELECT dossier FROM projects WHERE id=$1',['p'])).rows[0].dossier;
+  assert.equal(raw.accesses[0].login,markers.login);
+  assert.equal(raw.accesses[0].password,markers.password);
+  assert.equal(raw.integration.token,markers.token);
+  const audit=JSON.stringify((await pool.query('SELECT details FROM audit_log')).rows);
+  for(const marker of Object.values(markers))assert.equal(audit.includes(marker),false);
+});
+
+test('shared project endpoints reject new credential values without changing stored data',async()=>{
+  await fixture();
+  const marker='rejected-credential-marker';
+  const before=JSON.stringify((await pool.query('SELECT dossier FROM projects WHERE id=$1',['p'])).rows[0].dossier);
+  assert.equal((await request('/api/data/project','POST',{...project('p'),dossier:{accesses:[{label:'Новый доступ',password:marker}]}})).status,400);
+  assert.equal(JSON.stringify((await pool.query('SELECT dossier FROM projects WHERE id=$1',['p'])).rows[0].dossier),before);
+  assert.equal((await request('/api/data','PUT',{projects:[{...project('blocked'),dossier:{integration:{token:marker}}}]})).status,400);
+  assert.equal((await pool.query('SELECT id FROM projects WHERE id=$1',['blocked'])).rows.length,0);
+});
+
 test('duplicate IDs and unsafe numeric task IDs are rejected without changing the revision',async()=>{
   await fixture();const before=(await request('/api/data')).body;
   const bad={...before,tasks:[before.tasks[0],{...before.tasks[0],id:String(before.tasks[0].id)}]};

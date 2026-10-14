@@ -114,3 +114,15 @@ test('offline backup remains protected and retains its original revision',async(
     await app.change([task]);await app.tick();assert.equal(app.puts[0]._revision,7);assert.equal(app.unload(),true);
   }finally{app.close();}
 });
+
+test('App removes project credentials from local backups and outgoing saves',async()=>{
+  const app=await appFixture();try{
+    const marker='app-credential-marker';
+    const project={...app.screen().props.data.projects[0],dossier:{accesses:[{label:'Архив',password:marker}]}};
+    await act(async()=>{app.screen().props.onUpdate('projects',[project]);});
+    const backup=[...app.storage.values()].at(-1);
+    assert.equal(backup.includes(marker),false);
+    await app.tick();
+    assert.equal(JSON.stringify(app.puts).includes(marker),false);
+  }finally{app.close();}
+});

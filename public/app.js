@@ -1884,10 +1884,60 @@ const BUILD_DATE = "11.10.2026";
 const STORAGE_MODE = "server";
 const SERVER_URL = "";
 const DATA_ARRAY_KEYS = ["projects", "series", "tasks", "people", "roles", "stages", "stageGroups", "holidays", "achievements", "personAbsences", "templates", "changelog"];
-function normalizeLoadedData(record) {
-  const result = {
-    ...(record || {})
+const CLIENT_SECRET_KEY = /^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
+const CLIENT_ACCESS_SECRET_KEY = /^(?:login|username|user|password|passwd|pwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|client[_-]?secret|credentials?)$/i;
+function clientPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function clientMeaningfulValue(value) {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.some(clientMeaningfulValue);
+  if (clientPlainObject(value)) return Object.values(value).some(clientMeaningfulValue);
+  return true;
+}
+function clientAccessHasCredential(access) {
+  if (!clientPlainObject(access)) return clientMeaningfulValue(access);
+  return Object.entries(access).some(_ref3 => {
+    let _ref4 = _slicedToArray(_ref3, 2),
+      key = _ref4[0],
+      value = _ref4[1];
+    return CLIENT_ACCESS_SECRET_KEY.test(key) && clientMeaningfulValue(value) || (Array.isArray(value) || clientPlainObject(value)) && clientAccessHasCredential(value);
+  });
+}
+function sanitizeClientNode(value) {
+  if (Array.isArray(value)) return value.map(sanitizeClientNode);
+  if (!clientPlainObject(value)) return value;
+  const safe = {};
+  for (const _ref5 of Object.entries(value)) {
+    var _ref6 = _slicedToArray(_ref5, 2);
+    const key = _ref6[0];
+    const item = _ref6[1];
+    if (key === "accesses") {
+      safe.accesses = Array.isArray(item) ? item.map(access => {
+        const entry = {};
+        if (clientPlainObject(access) && typeof access.id === "string") entry.id = access.id;
+        if (clientPlainObject(access) && typeof access.label === "string") entry.label = access.label;
+        if (clientPlainObject(access) && typeof access.name === "string" && !entry.label) entry.label = access.name;
+        if (clientAccessHasCredential(access) || (access === null || access === void 0 ? void 0 : access.credentialsStored) === true) entry.credentialsStored = true;
+        return entry;
+      }).filter(entry => entry.id || entry.label || entry.credentialsStored) : [];
+    } else if (!CLIENT_SECRET_KEY.test(key)) safe[key] = sanitizeClientNode(item);
+  }
+  return safe;
+}
+function sanitizeClientData(record) {
+  const source = clientPlainObject(record) ? record : {};
+  const safe = {
+    ...source
   };
+  safe.projects = Array.isArray(source.projects) ? source.projects.map(project => ({
+    ...project,
+    dossier: sanitizeClientNode(clientPlainObject(project === null || project === void 0 ? void 0 : project.dossier) ? project.dossier : {})
+  })) : [];
+  return safe;
+}
+function normalizeLoadedData(record) {
+  const result = sanitizeClientData(record);
   DATA_ARRAY_KEYS.forEach(key => {
     if (!Array.isArray(result[key])) result[key] = [];
   });
@@ -1895,6 +1945,13 @@ function normalizeLoadedData(record) {
 }
 function accountBackupKey(user) {
   return "post_tracker_backup:" + String((user === null || user === void 0 ? void 0 : user.sam_name) || (user === null || user === void 0 ? void 0 : user.id) || "anonymous");
+}
+function persistAccountBackup(user, data) {
+  const safe = sanitizeClientData(data);
+  localStorage.setItem(accountBackupKey(user), JSON.stringify({
+    ts: safe._savedAt,
+    data: safe
+  }));
 }
 function undoSnapshot(previous, current) {
   let now = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : Date.now();
@@ -2005,6 +2062,7 @@ async function cloudLoad() {
   return normalizeLoadedData(await res.json());
 }
 async function cloudSave(data, clientId) {
+  const safeData = sanitizeClientData(data);
   const headers = {
     "Content-Type": "application/json"
   };
@@ -2013,7 +2071,7 @@ async function cloudSave(data, clientId) {
     method: "PUT",
     headers,
     credentials: "include",
-    body: JSON.stringify(data)
+    body: JSON.stringify(safeData)
   });
   if (!res.ok) {
     const problem = await res.json().catch(() => ({}));
@@ -2092,8 +2150,11 @@ function makeDemoData() {
     holidays: DEFAULT_HOLIDAYS
   };
 }
+function serializeExportData(data) {
+  return JSON.stringify(sanitizeClientData(data), null, 2);
+}
 function exportJSON(data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
+  const blob = new Blob([serializeExportData(data)], {
     type: "application/json"
   });
   const a = document.createElement("a");
@@ -2305,12 +2366,12 @@ function projectMarkStyle(project) {
   }
   return style;
 }
-function ProjectMark(_ref3) {
-  let project = _ref3.project,
-    _ref3$size = _ref3.size,
-    size = _ref3$size === void 0 ? 8 : _ref3$size,
-    style = _ref3.style,
-    title = _ref3.title;
+function ProjectMark(_ref7) {
+  let project = _ref7.project,
+    _ref7$size = _ref7.size,
+    size = _ref7$size === void 0 ? 8 : _ref7$size,
+    style = _ref7.style,
+    title = _ref7.title;
   return React.createElement("span", {
     title: title || (project === null || project === void 0 ? void 0 : project.name) || "",
     style: {
@@ -2319,10 +2380,10 @@ function ProjectMark(_ref3) {
     }
   });
 }
-function ProjectVisualPicker(_ref4) {
-  let project = _ref4.project,
-    onColor = _ref4.onColor,
-    onVisual = _ref4.onVisual;
+function ProjectVisualPicker(_ref8) {
+  let project = _ref8.project,
+    onColor = _ref8.onColor,
+    onVisual = _ref8.onVisual;
   const visual = projectVisual(project);
   const color = (project === null || project === void 0 ? void 0 : project.color) || "#3b82f6";
   const setVisual = ch => onVisual && onVisual({
@@ -2930,14 +2991,14 @@ function currentUserManagerEntry(user, data) {
     name: (person === null || person === void 0 ? void 0 : person.name) || (user === null || user === void 0 ? void 0 : user.display_name) || (user === null || user === void 0 ? void 0 : user.sam_name) || (user === null || user === void 0 ? void 0 : user.userId) || (user === null || user === void 0 ? void 0 : user.id) || ""
   };
 }
-function Modal(_ref5) {
+function Modal(_ref9) {
   var _ReactDOM;
-  let title = _ref5.title,
-    onClose = _ref5.onClose,
-    wide = _ref5.wide,
-    onSubmit = _ref5.onSubmit,
-    children = _ref5.children,
-    freeOverflow = _ref5.freeOverflow;
+  let title = _ref9.title,
+    onClose = _ref9.onClose,
+    wide = _ref9.wide,
+    onSubmit = _ref9.onSubmit,
+    children = _ref9.children,
+    freeOverflow = _ref9.freeOverflow;
   useEffect(() => {
     const h = e => {
       if (e.key === "Escape") {
@@ -3026,15 +3087,15 @@ function Modal(_ref5) {
   }
   return modal;
 }
-function Btn(_ref6) {
-  let onClick = _ref6.onClick,
-    _ref6$variant = _ref6.variant,
-    variant = _ref6$variant === void 0 ? "default" : _ref6$variant,
-    children = _ref6.children,
-    small = _ref6.small,
-    style = _ref6.style,
-    disabled = _ref6.disabled,
-    type = _ref6.type;
+function Btn(_ref0) {
+  let onClick = _ref0.onClick,
+    _ref0$variant = _ref0.variant,
+    variant = _ref0$variant === void 0 ? "default" : _ref0$variant,
+    children = _ref0.children,
+    small = _ref0.small,
+    style = _ref0.style,
+    disabled = _ref0.disabled,
+    type = _ref0.type;
   const s = {
     default: {
       background: "linear-gradient(180deg,rgba(30,58,95,.78),rgba(15,23,42,.7))",
@@ -3086,11 +3147,11 @@ function Btn(_ref6) {
     }
   }, children);
 }
-function Field(_ref7) {
-  let label = _ref7.label,
-    children = _ref7.children,
-    hint = _ref7.hint,
-    row = _ref7.row;
+function Field(_ref1) {
+  let label = _ref1.label,
+    children = _ref1.children,
+    hint = _ref1.hint,
+    row = _ref1.row;
   return React.createElement("div", {
     style: {
       marginBottom: 14
@@ -3118,14 +3179,14 @@ function Field(_ref7) {
     }
   }, hint));
 }
-function Inp(_ref8) {
-  let value = _ref8.value,
-    onChange = _ref8.onChange,
-    placeholder = _ref8.placeholder,
-    style = _ref8.style,
-    type = _ref8.type,
-    min = _ref8.min,
-    max = _ref8.max;
+function Inp(_ref10) {
+  let value = _ref10.value,
+    onChange = _ref10.onChange,
+    placeholder = _ref10.placeholder,
+    style = _ref10.style,
+    type = _ref10.type,
+    min = _ref10.min,
+    max = _ref10.max;
   return React.createElement("input", {
     className: "ppt-input",
     type: type || "text",
@@ -3146,10 +3207,10 @@ function Inp(_ref8) {
     }
   });
 }
-function InpDate(_ref9) {
-  let value = _ref9.value,
-    onChange = _ref9.onChange,
-    warn = _ref9.warn;
+function InpDate(_ref11) {
+  let value = _ref11.value,
+    onChange = _ref11.onChange,
+    warn = _ref11.warn;
   return React.createElement("div", null, React.createElement("input", {
     className: "ppt-input",
     type: "date",
@@ -3172,12 +3233,12 @@ function InpDate(_ref9) {
     }
   }, "! \u0412\u044B\u0445\u043E\u0434\u043D\u043E\u0439 \u0438\u043B\u0438 \u043F\u0440\u0430\u0437\u0434\u043D\u0438\u043A"));
 }
-function Sel(_ref0) {
-  let value = _ref0.value,
-    onChange = _ref0.onChange,
-    options = _ref0.options,
-    placeholder = _ref0.placeholder,
-    style = _ref0.style;
+function Sel(_ref12) {
+  let value = _ref12.value,
+    onChange = _ref12.onChange,
+    options = _ref12.options,
+    placeholder = _ref12.placeholder,
+    style = _ref12.style;
   return React.createElement("select", {
     className: "ppt-input",
     value: value || "",
@@ -3202,14 +3263,14 @@ function Sel(_ref0) {
     value: o.value
   }, o.label)));
 }
-function SelSearch(_ref1) {
-  let value = _ref1.value,
-    onChange = _ref1.onChange,
-    options = _ref1.options,
-    placeholder = _ref1.placeholder,
-    style = _ref1.style,
-    allowCustom = _ref1.allowCustom,
-    autoFocus = _ref1.autoFocus;
+function SelSearch(_ref13) {
+  let value = _ref13.value,
+    onChange = _ref13.onChange,
+    options = _ref13.options,
+    placeholder = _ref13.placeholder,
+    style = _ref13.style,
+    allowCustom = _ref13.allowCustom,
+    autoFocus = _ref13.autoFocus;
   const _useState = useState(""),
     _useState2 = _slicedToArray(_useState, 2),
     query = _useState2[0],
@@ -3366,9 +3427,9 @@ function SelSearch(_ref1) {
     }
   }, opt.label))));
 }
-function StatusBadge(_ref10) {
-  let s = _ref10.s,
-    small = _ref10.small;
+function StatusBadge(_ref14) {
+  let s = _ref14.s,
+    small = _ref14.small;
   const _useContext = useContext(StagesCtx),
     stageMap = _useContext.stageMap;
   const st = stageMap[s];
@@ -3393,13 +3454,13 @@ function StatusBadge(_ref10) {
     title: st.abbr ? st.label : undefined
   }, small && st.abbr ? st.abbr : st.label);
 }
-function TaskCard(_ref11) {
-  let task = _ref11.task,
-    projects = _ref11.projects,
-    isConflict = _ref11.isConflict,
-    onClick = _ref11.onClick,
-    onHover = _ref11.onHover,
-    large = _ref11.large;
+function TaskCard(_ref15) {
+  let task = _ref15.task,
+    projects = _ref15.projects,
+    isConflict = _ref15.isConflict,
+    onClick = _ref15.onClick,
+    onHover = _ref15.onHover,
+    large = _ref15.large;
   const color = projColor(projects, task.project);
   const pname = large ? projAbbr(projects, task.project) : projName(projects, task.project);
   return React.createElement("div", {
@@ -3470,10 +3531,10 @@ function TaskCard(_ref11) {
     }
   }, fmtHour(task.from), "\u2013", fmtHour(task.to))));
 }
-function TaskTooltip(_ref12) {
-  let task = _ref12.task,
-    rect = _ref12.rect,
-    projects = _ref12.projects;
+function TaskTooltip(_ref16) {
+  let task = _ref16.task,
+    rect = _ref16.rect,
+    projects = _ref16.projects;
   const _useContext2 = useContext(StagesCtx),
     stageMap = _useContext2.stageMap;
   if (!task || !rect) return null;
@@ -3573,12 +3634,12 @@ function TaskTooltip(_ref12) {
     }
   }, task.note));
 }
-function StageEditModal(_ref13) {
-  let stage = _ref13.stage,
-    roles = _ref13.roles,
-    stageGroups = _ref13.stageGroups,
-    onSave = _ref13.onSave,
-    onClose = _ref13.onClose;
+function StageEditModal(_ref17) {
+  let stage = _ref17.stage,
+    roles = _ref17.roles,
+    stageGroups = _ref17.stageGroups,
+    onSave = _ref17.onSave,
+    onClose = _ref17.onClose;
   const _useState7 = useState({
       ...stage
     }),
@@ -3779,13 +3840,13 @@ function StageEditModal(_ref13) {
     onClick: handleSave
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")));
 }
-function DirectoryView(_ref14) {
-  let data = _ref14.data,
-    writeUpdate = _ref14.onUpdate,
-    writeBatchUpdate = _ref14.onBatchUpdate,
-    onLog = _ref14.onLog,
-    user = _ref14.user,
-    onUserUpdate = _ref14.onUserUpdate;
+function DirectoryView(_ref18) {
+  let data = _ref18.data,
+    writeUpdate = _ref18.onUpdate,
+    writeBatchUpdate = _ref18.onBatchUpdate,
+    onLog = _ref18.onLog,
+    user = _ref18.user,
+    onUserUpdate = _ref18.onUserUpdate;
   const _useState9 = useState("roles"),
     _useState0 = _slicedToArray(_useState9, 2),
     tab = _useState0[0],
@@ -4844,15 +4905,15 @@ function DirectoryView(_ref14) {
     onClose: () => setStageModal(null)
   }));
 }
-function AchievementsSettings(_ref15) {
-  let achievements = _ref15.achievements,
-    stages = _ref15.stages,
-    stageGroups = _ref15.stageGroups,
-    roles = _ref15.roles,
-    canEdit = _ref15.canEdit,
-    onNew = _ref15.onNew,
-    onEdit = _ref15.onEdit,
-    onDelete = _ref15.onDelete;
+function AchievementsSettings(_ref19) {
+  let achievements = _ref19.achievements,
+    stages = _ref19.stages,
+    stageGroups = _ref19.stageGroups,
+    roles = _ref19.roles,
+    canEdit = _ref19.canEdit,
+    onNew = _ref19.onNew,
+    onEdit = _ref19.onEdit,
+    onDelete = _ref19.onDelete;
   const sorted = [...(achievements || [])].sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1) || a.title.localeCompare(b.title));
   return React.createElement("div", {
     style: {
@@ -5000,13 +5061,13 @@ function AchievementsSettings(_ref15) {
     }, "\u0423\u0434\u0430\u043b\u0438\u0442\u044c")));
   })));
 }
-function AchievementModal(_ref16) {
-  let achievement = _ref16.achievement,
-    stages = _ref16.stages,
-    stageGroups = _ref16.stageGroups,
-    roles = _ref16.roles,
-    onSave = _ref16.onSave,
-    onClose = _ref16.onClose;
+function AchievementModal(_ref20) {
+  let achievement = _ref20.achievement,
+    stages = _ref20.stages,
+    stageGroups = _ref20.stageGroups,
+    roles = _ref20.roles,
+    onSave = _ref20.onSave,
+    onClose = _ref20.onClose;
   const _useState27 = useState(normalizeAchievement(achievement)),
     _useState28 = _slicedToArray(_useState27, 2),
     form = _useState28[0],
@@ -5221,10 +5282,10 @@ function AchievementModal(_ref16) {
     onClick: () => onSave(form)
   }, "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c")));
 }
-function SeriesTemplateModal(_ref17) {
-  let tmpl = _ref17.tmpl,
-    onSave = _ref17.onSave,
-    onClose = _ref17.onClose;
+function SeriesTemplateModal(_ref21) {
+  let tmpl = _ref21.tmpl,
+    onSave = _ref21.onSave,
+    onClose = _ref21.onClose;
   const _useState29 = useState({
       ...tmpl
     }),
@@ -5324,13 +5385,13 @@ function SeriesTemplateModal(_ref17) {
     onClick: handleSave
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C")));
 }
-function PersonModal(_ref18) {
-  let person = _ref18.person,
-    roles = _ref18.roles,
-    canEditBirthday = _ref18.canEditBirthday,
-    onSave = _ref18.onSave,
-    onDelete = _ref18.onDelete,
-    onClose = _ref18.onClose;
+function PersonModal(_ref22) {
+  let person = _ref22.person,
+    roles = _ref22.roles,
+    canEditBirthday = _ref22.canEditBirthday,
+    onSave = _ref22.onSave,
+    onDelete = _ref22.onDelete,
+    onClose = _ref22.onClose;
   const _useState31 = useState({
       name: person.name || "",
       roles: [...(person.roles || [])],
@@ -5601,19 +5662,19 @@ function PersonModal(_ref18) {
     onClick: handleSave
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"))));
 }
-function ProjectsView(_ref19) {
-  let data = _ref19.data,
-    onUpdate = _ref19.onUpdate,
-    onBatchUpdate = _ref19.onBatchUpdate,
-    onDeleteProject = _ref19.onDeleteProject,
-    onProjectSelect = _ref19.onProjectSelect,
-    onSeriesSelect = _ref19.onSeriesSelect,
-    canEdit = _ref19.canEdit,
-    canDeleteStructure = _ref19.canDeleteStructure,
-    isManager = _ref19.isManager,
-    canManageProjectAssignments = _ref19.canManageProjectAssignments,
-    canEditProjectById = _ref19.canEditProjectById,
-    currentManagerEntry = _ref19.currentManagerEntry;
+function ProjectsView(_ref23) {
+  let data = _ref23.data,
+    onUpdate = _ref23.onUpdate,
+    onBatchUpdate = _ref23.onBatchUpdate,
+    onDeleteProject = _ref23.onDeleteProject,
+    onProjectSelect = _ref23.onProjectSelect,
+    onSeriesSelect = _ref23.onSeriesSelect,
+    canEdit = _ref23.canEdit,
+    canDeleteStructure = _ref23.canDeleteStructure,
+    isManager = _ref23.isManager,
+    canManageProjectAssignments = _ref23.canManageProjectAssignments,
+    canEditProjectById = _ref23.canEditProjectById,
+    currentManagerEntry = _ref23.currentManagerEntry;
   const _useContext3 = useContext(StagesCtx),
     stages = _useContext3.sorted,
     stageGroups = _useContext3.stageGroups,
@@ -5698,10 +5759,10 @@ function ProjectsView(_ref19) {
       overflow: "hidden",
       marginLeft: 8
     }
-  }, [["все", "Все"], ["в работе", "В работе"], ["архив", "Архив"]].map(_ref20 => {
-    let _ref21 = _slicedToArray(_ref20, 2),
-      v = _ref21[0],
-      l = _ref21[1];
+  }, [["все", "Все"], ["в работе", "В работе"], ["архив", "Архив"]].map(_ref24 => {
+    let _ref25 = _slicedToArray(_ref24, 2),
+      v = _ref25[0],
+      l = _ref25[1];
     return React.createElement("button", {
       key: v,
       onClick: () => setArchFilter(v),
@@ -6250,10 +6311,10 @@ function ProjectsView(_ref19) {
     onClose: () => setDirectEditSeries(null)
   }));
 }
-function ManagerPicker(_ref22) {
-  let value = _ref22.value,
-    options = _ref22.options,
-    onChange = _ref22.onChange;
+function ManagerPicker(_ref26) {
+  let value = _ref26.value,
+    options = _ref26.options,
+    onChange = _ref26.onChange;
   const _React$useState = React.useState(""),
     _React$useState2 = _slicedToArray(_React$useState, 2),
     sel = _React$useState2[0],
@@ -6333,17 +6394,17 @@ function ManagerPicker(_ref22) {
     value: p.name
   }, p.name))));
 }
-function ProjectModal(_ref23) {
-  let project = _ref23.project,
-    data = _ref23.data,
-    onSave = _ref23.onSave,
-    onDelete = _ref23.onDelete,
-    onClose = _ref23.onClose,
-    canEdit = _ref23.canEdit,
-    canDelete = _ref23.canDelete,
-    canEditStatus = _ref23.canEditStatus,
-    canEditManagers = _ref23.canEditManagers,
-    currentManagerEntry = _ref23.currentManagerEntry;
+function ProjectModal(_ref27) {
+  let project = _ref27.project,
+    data = _ref27.data,
+    onSave = _ref27.onSave,
+    onDelete = _ref27.onDelete,
+    onClose = _ref27.onClose,
+    canEdit = _ref27.canEdit,
+    canDelete = _ref27.canDelete,
+    canEditStatus = _ref27.canEditStatus,
+    canEditManagers = _ref27.canEditManagers,
+    currentManagerEntry = _ref27.currentManagerEntry;
   const _useState49 = useState({
       ...project
     }),
@@ -6489,12 +6550,12 @@ function ProjectModal(_ref23) {
     onClick: handleSave
   }, isNew ? "Создать проект" : "Сохранить"))));
 }
-function SeriesListModal(_ref24) {
-  let project = _ref24.project,
-    data = _ref24.data,
-    onSave = _ref24.onSave,
-    onClose = _ref24.onClose,
-    canDeleteStructure = _ref24.canDeleteStructure;
+function SeriesListModal(_ref28) {
+  let project = _ref28.project,
+    data = _ref28.data,
+    onSave = _ref28.onSave,
+    onClose = _ref28.onClose,
+    canDeleteStructure = _ref28.canDeleteStructure;
   const _useContext4 = useContext(StagesCtx),
     stages = _useContext4.sorted;
   const getSorted = () => (data.series || []).filter(s => s.projectId === project.id).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -6693,12 +6754,12 @@ function SeriesListModal(_ref24) {
     onClose: () => setSeriesEdit(null)
   }));
 }
-function SeriesModal(_ref25) {
-  let series = _ref25.series,
-    onSave = _ref25.onSave,
-    onClose = _ref25.onClose,
-    templates = _ref25.templates,
-    project = _ref25.project;
+function SeriesModal(_ref29) {
+  let series = _ref29.series,
+    onSave = _ref29.onSave,
+    onClose = _ref29.onClose,
+    templates = _ref29.templates,
+    project = _ref29.project;
   const holidays = useContext(HolidaysCtx);
   const _useState55 = useState({
       ...series
@@ -6945,10 +7006,10 @@ function SeriesModal(_ref25) {
     onClick: handleSave
   }, isNew ? "Создать серию" : "Сохранить")));
 }
-function CalendarView(_ref26) {
-  let data = _ref26.data,
-    onGoToGantt = _ref26.onGoToGantt,
-    canEdit = _ref26.canEdit;
+function CalendarView(_ref30) {
+  let data = _ref30.data,
+    onGoToGantt = _ref30.onGoToGantt,
+    canEdit = _ref30.canEdit;
   const today = new Date();
   const _useState57 = useState(today.getFullYear()),
     _useState58 = _slicedToArray(_useState57, 2),
@@ -7354,9 +7415,9 @@ function CalendarView(_ref26) {
     }
   }, dayLabel(selStr)), React.createElement("div", {
     className: "ppt-calendar-detail-events"
-  }, selAirs.map((_ref27, i) => {
-    let proj = _ref27.proj,
-      ser = _ref27.ser;
+  }, selAirs.map((_ref31, i) => {
+    let proj = _ref31.proj,
+      ser = _ref31.ser;
     return React.createElement("div", {
       key: proj.id + ser.id + i,
       className: "ppt-calendar-detail-event air"
@@ -7419,11 +7480,11 @@ function CalendarView(_ref26) {
     projects: data.projects
   }));
 }
-function CalendarDayTooltip(_ref28) {
-  let dayTasks = _ref28.dayTasks,
-    ds = _ref28.ds,
-    rect = _ref28.rect,
-    projects = _ref28.projects;
+function CalendarDayTooltip(_ref32) {
+  let dayTasks = _ref32.dayTasks,
+    ds = _ref32.ds,
+    rect = _ref32.rect,
+    projects = _ref32.projects;
   const _useContext6 = useContext(StagesCtx),
     stageMap = _useContext6.stageMap;
   if (!(dayTasks !== null && dayTasks !== void 0 && dayTasks.length)) return null;
@@ -7509,11 +7570,11 @@ function CalendarDayTooltip(_ref28) {
     }
   }, "\u2026\u0435\u0449\u0451 ", dayTasks.length - 12));
 }
-function GanttTooltip(_ref29) {
-  let task = _ref29.task,
-    tasks = _ref29.tasks,
-    rect = _ref29.rect,
-    stageMap = _ref29.stageMap;
+function GanttTooltip(_ref33) {
+  let task = _ref33.task,
+    tasks = _ref33.tasks,
+    rect = _ref33.rect,
+    stageMap = _ref33.stageMap;
   const all = tasks || (task ? [task] : []);
   if (!all.length || !rect) return null;
   const W = 240;
@@ -7650,16 +7711,16 @@ function GanttTooltip(_ref29) {
     }, "\uD83D\uDCAC"));
   }));
 }
-function GanttView(_ref30) {
-  let data = _ref30.data,
-    onUpdate = _ref30.onUpdate,
-    onBatchUpdate = _ref30.onBatchUpdate,
-    onSeriesSelect = _ref30.onSeriesSelect,
-    startDay = _ref30.startDay,
-    onLog = _ref30.onLog,
-    canEdit = _ref30.canEdit,
-    canEditOldTasks = _ref30.canEditOldTasks,
-    canEditProjectById = _ref30.canEditProjectById;
+function GanttView(_ref34) {
+  let data = _ref34.data,
+    onUpdate = _ref34.onUpdate,
+    onBatchUpdate = _ref34.onBatchUpdate,
+    onSeriesSelect = _ref34.onSeriesSelect,
+    startDay = _ref34.startDay,
+    onLog = _ref34.onLog,
+    canEdit = _ref34.canEdit,
+    canEditOldTasks = _ref34.canEditOldTasks,
+    canEditProjectById = _ref34.canEditProjectById;
   const _useContext7 = useContext(StagesCtx),
     stages = _useContext7.sorted,
     stageMap = _useContext7.stageMap,
@@ -8790,9 +8851,9 @@ function GanttView(_ref30) {
           onMouseEnter: e => {
             if (lassoRef.current && lassoRef.current.projId === proj.id && lassoRef.current.serName === ser.name) {
               lassoRef.current.endDayIdx = dIdx;
-              const _ref31 = [lassoRef.current.startDayIdx, dIdx],
-                a = _ref31[0],
-                b = _ref31[1];
+              const _ref35 = [lassoRef.current.startDayIdx, dIdx],
+                a = _ref35[0],
+                b = _ref35[1];
               setLassoRange({
                 projId: proj.id,
                 serName: ser.name,
@@ -8948,10 +9009,10 @@ function GanttView(_ref30) {
             if (!groups[t.status]) groups[t.status] = [];
             groups[t.status].push(t);
           });
-          const badges = Object.entries(groups).map(_ref32 => {
-            let _ref33 = _slicedToArray(_ref32, 2),
-              status = _ref33[0],
-              grpTasks = _ref33[1];
+          const badges = Object.entries(groups).map(_ref36 => {
+            let _ref37 = _slicedToArray(_ref36, 2),
+              status = _ref37[0],
+              grpTasks = _ref37[1];
             const st = stageMap[status];
             const grpColor = st !== null && st !== void 0 && st.groupId ? groupColorMap[st.groupId] : undefined;
             const barColor = grpColor || proj.color;
@@ -9175,15 +9236,15 @@ function GanttView(_ref30) {
     canEditProjectById: canEditProjectById
   }));
 }
-function TaskModal(_ref34) {
-  let task = _ref34.task,
-    data = _ref34.data,
-    onSave = _ref34.onSave,
-    onDelete = _ref34.onDelete,
-    onClose = _ref34.onClose,
-    canEdit = _ref34.canEdit,
-    canEditOldTasks = _ref34.canEditOldTasks,
-    canEditProjectById = _ref34.canEditProjectById;
+function TaskModal(_ref38) {
+  let task = _ref38.task,
+    data = _ref38.data,
+    onSave = _ref38.onSave,
+    onDelete = _ref38.onDelete,
+    onClose = _ref38.onClose,
+    canEdit = _ref38.canEdit,
+    canEditOldTasks = _ref38.canEditOldTasks,
+    canEditProjectById = _ref38.canEditProjectById;
   const _useContext8 = useContext(StagesCtx),
     stages = _useContext8.sorted,
     stageMap = _useContext8.stageMap;
@@ -9382,9 +9443,9 @@ function TaskModal(_ref34) {
       flexWrap: "wrap",
       marginBottom: 6
     }
-  }, TIME_PRESETS.map(_ref35 => {
-    let fr = _ref35.f,
-      to = _ref35.t;
+  }, TIME_PRESETS.map(_ref39 => {
+    let fr = _ref39.f,
+      to = _ref39.t;
     return React.createElement(Btn, {
       key: `${fr}-${to}`,
       small: true,
@@ -9610,9 +9671,9 @@ function TaskModal(_ref34) {
     onClick: handleSave
   }, isNew ? "Создать задачу" : "Сохранить"))));
 }
-function DaysView(_ref36) {
-  let data = _ref36.data,
-    conflictIds = _ref36.conflictIds;
+function DaysView(_ref40) {
+  let data = _ref40.data,
+    conflictIds = _ref40.conflictIds;
   const _useState95 = useState("week"),
     _useState96 = _slicedToArray(_useState95, 2),
     groupBy = _useState96[0],
@@ -9663,10 +9724,10 @@ function DaysView(_ref36) {
       block: "nearest"
     });
   }
-  function DayCol(_ref37) {
-    let dayKey = _ref37.dayKey,
-      dayTasks = _ref37.dayTasks,
-      compact = _ref37.compact;
+  function DayCol(_ref41) {
+    let dayKey = _ref41.dayKey,
+      dayTasks = _ref41.dayTasks,
+      compact = _ref41.compact;
     const hasC = dayTasks.some(t => conflictIds.has(t.id));
     return React.createElement("div", {
       "data-day": dayKey
@@ -9797,10 +9858,10 @@ function DaysView(_ref36) {
       color: "#263352",
       margin: "0 4px"
     }
-  }, "\u2502"), [["week", "Неделя"], ["month", "Месяц"]].map(_ref38 => {
-    let _ref39 = _slicedToArray(_ref38, 2),
-      v = _ref39[0],
-      l = _ref39[1];
+  }, "\u2502"), [["week", "Неделя"], ["month", "Месяц"]].map(_ref42 => {
+    let _ref43 = _slicedToArray(_ref42, 2),
+      v = _ref43[0],
+      l = _ref43[1];
     return React.createElement("button", {
       key: v,
       onClick: () => setGroupBy(v),
@@ -9837,16 +9898,16 @@ function DaysView(_ref36) {
       flexDirection: "column",
       gap: 20
     }
-  }, Object.entries(groups).sort((_ref40, _ref41) => {
-    let _ref42 = _slicedToArray(_ref40, 1),
-      a = _ref42[0];
-    let _ref43 = _slicedToArray(_ref41, 1),
-      b = _ref43[0];
+  }, Object.entries(groups).sort((_ref44, _ref45) => {
+    let _ref46 = _slicedToArray(_ref44, 1),
+      a = _ref46[0];
+    let _ref47 = _slicedToArray(_ref45, 1),
+      b = _ref47[0];
     return a.localeCompare(b);
-  }).map(_ref44 => {
-    let _ref45 = _slicedToArray(_ref44, 2),
-      gk = _ref45[0],
-      gTasks = _ref45[1];
+  }).map(_ref48 => {
+    let _ref49 = _slicedToArray(_ref48, 2),
+      gk = _ref49[0],
+      gTasks = _ref49[1];
     const sample = gTasks[0];
     const title = groupBy === "week" ? `Неделя ${weekLabel(sample.day)}` : `${MONTHS[parseInt(gk.split("-")[1]) - 1]} ${gk.split("-")[0]}`;
     const dks = [...new Set(gTasks.map(t => t._dayKey))].filter(dk => gTasks.some(t => t._dayKey === dk && peopleCols.includes(t.person))).sort((a, b) => daySort(a).localeCompare(daySort(b)));
@@ -9887,14 +9948,14 @@ function DaysView(_ref36) {
     projects: data.projects
   }));
 }
-function PeopleView(_ref46) {
-  let data = _ref46.data,
-    conflictIds = _ref46.conflictIds,
-    onPersonSelect = _ref46.onPersonSelect,
-    canEdit = _ref46.canEdit,
-    onUpdate = _ref46.onUpdate,
-    onLog = _ref46.onLog,
-    canEditProjectById = _ref46.canEditProjectById;
+function PeopleView(_ref50) {
+  let data = _ref50.data,
+    conflictIds = _ref50.conflictIds,
+    onPersonSelect = _ref50.onPersonSelect,
+    canEdit = _ref50.canEdit,
+    onUpdate = _ref50.onUpdate,
+    onLog = _ref50.onLog,
+    canEditProjectById = _ref50.canEditProjectById;
   const _useContext9 = useContext(StagesCtx),
     stageMap = _useContext9.stageMap;
   const _useState103 = useState(0),
@@ -11030,11 +11091,11 @@ function PeopleView(_ref46) {
     canEditProjectById: canEditProjectById
   }));
 }
-function PeopleViewLegacy(_ref47) {
-  let data = _ref47.data,
-    conflictIds = _ref47.conflictIds,
-    onPersonSelect = _ref47.onPersonSelect,
-    canEdit = _ref47.canEdit;
+function PeopleViewLegacy(_ref51) {
+  let data = _ref51.data,
+    conflictIds = _ref51.conflictIds,
+    onPersonSelect = _ref51.onPersonSelect,
+    canEdit = _ref51.canEdit;
   const _useState123 = useState([]),
     _useState124 = _slicedToArray(_useState123, 2),
     selPeople = _useState124[0],
@@ -11135,10 +11196,10 @@ function PeopleViewLegacy(_ref47) {
       color: "#263352",
       margin: "0 4px"
     }
-  }, "\u2502"), [["day", "Дни"], ["week", "Нед"], ["month", "Мес"]].map(_ref48 => {
-    let _ref49 = _slicedToArray(_ref48, 2),
-      v = _ref49[0],
-      l = _ref49[1];
+  }, "\u2502"), [["day", "Дни"], ["week", "Нед"], ["month", "Мес"]].map(_ref52 => {
+    let _ref53 = _slicedToArray(_ref52, 2),
+      v = _ref53[0],
+      l = _ref53[1];
     return React.createElement("button", {
       key: v,
       onClick: () => setGroupBy(v),
@@ -11231,16 +11292,16 @@ function PeopleViewLegacy(_ref47) {
         gridTemplateColumns: `repeat(${Math.min(Object.keys(groups).length, 7)},1fr)`,
         gap: 6
       }
-    }, Object.entries(groups).sort((_ref50, _ref51) => {
-      let _ref52 = _slicedToArray(_ref50, 1),
-        a = _ref52[0];
-      let _ref53 = _slicedToArray(_ref51, 1),
-        b = _ref53[0];
+    }, Object.entries(groups).sort((_ref54, _ref55) => {
+      let _ref56 = _slicedToArray(_ref54, 1),
+        a = _ref56[0];
+      let _ref57 = _slicedToArray(_ref55, 1),
+        b = _ref57[0];
       return daySort(a).localeCompare(daySort(b));
-    }).map(_ref54 => {
-      let _ref55 = _slicedToArray(_ref54, 2),
-        gk = _ref55[0],
-        gtasks = _ref55[1];
+    }).map(_ref58 => {
+      let _ref59 = _slicedToArray(_ref58, 2),
+        gk = _ref59[0],
+        gtasks = _ref59[1];
       const hasC = gtasks.some(t => conflictIds.has(t.id));
       const label = groupBy === "day" ? dayLabel(gk) : groupBy === "week" ? `Нед ${weekLabel(gtasks[0].day)}` : `${MONTHS[parseInt(gk.split("-")[1]) - 1]}`;
       return React.createElement("div", {
@@ -11278,9 +11339,9 @@ function PeopleViewLegacy(_ref47) {
     projects: data.projects
   }));
 }
-function ConflictsView(_ref56) {
-  let details = _ref56.details,
-    data = _ref56.data;
+function ConflictsView(_ref60) {
+  let details = _ref60.details,
+    data = _ref60.data;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = formatDate(today);
@@ -11627,16 +11688,16 @@ function ConflictsView(_ref56) {
       color: "#64748b",
       fontSize: 12
     }
-  }, "\u043E\u0434\u0438\u043D \u0447\u0435\u043B\u043E\u0432\u0435\u043A \u2014 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0437\u0430\u0434\u0430\u0447 \u0432 \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0449\u0435\u0435\u0441\u044F \u0432\u0440\u0435\u043C\u044F"))), Object.entries(byDay).sort((_ref57, _ref58) => {
-    let _ref59 = _slicedToArray(_ref57, 1),
-      a = _ref59[0];
-    let _ref60 = _slicedToArray(_ref58, 1),
-      b = _ref60[0];
+  }, "\u043E\u0434\u0438\u043D \u0447\u0435\u043B\u043E\u0432\u0435\u043A \u2014 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0437\u0430\u0434\u0430\u0447 \u0432 \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0449\u0435\u0435\u0441\u044F \u0432\u0440\u0435\u043C\u044F"))), Object.entries(byDay).sort((_ref61, _ref62) => {
+    let _ref63 = _slicedToArray(_ref61, 1),
+      a = _ref63[0];
+    let _ref64 = _slicedToArray(_ref62, 1),
+      b = _ref64[0];
     return daySort(a).localeCompare(daySort(b));
-  }).map(_ref61 => {
-    let _ref62 = _slicedToArray(_ref61, 2),
-      day = _ref62[0],
-      pairs = _ref62[1];
+  }).map(_ref65 => {
+    let _ref66 = _slicedToArray(_ref65, 2),
+      day = _ref66[0],
+      pairs = _ref66[1];
     return React.createElement("div", {
       key: day,
       style: {
@@ -11740,10 +11801,10 @@ function ConflictsView(_ref56) {
         t: p.taskB,
         c: colorB,
         top: 24
-      }].map(_ref63 => {
-        let t = _ref63.t,
-          c = _ref63.c,
-          top = _ref63.top;
+      }].map(_ref67 => {
+        let t = _ref67.t,
+          c = _ref67.c,
+          top = _ref67.top;
         return React.createElement("div", {
           key: t.id,
           style: {
@@ -11944,10 +12005,10 @@ function computeShifts(tasks, people) {
     byPersonDay[key] = (byPersonDay[key] || 0) + (Number(t.to) || 0) - (Number(t.from) || 0);
   });
   const byPerson = {};
-  Object.entries(byPersonDay).forEach(_ref64 => {
-    let _ref65 = _slicedToArray(_ref64, 2),
-      key = _ref65[0],
-      hours = _ref65[1];
+  Object.entries(byPersonDay).forEach(_ref68 => {
+    let _ref69 = _slicedToArray(_ref68, 2),
+      key = _ref69[0],
+      hours = _ref69[1];
     const _key$split = key.split("|"),
       _key$split2 = _slicedToArray(_key$split, 1),
       person = _key$split2[0];
@@ -11968,9 +12029,9 @@ function computeShifts(tasks, people) {
     };
   }).sort((a, b) => a.role.localeCompare(b.role) || a.person.localeCompare(b.person));
 }
-function AnalyticsView(_ref66) {
-  let data = _ref66.data,
-    onPersonSelect = _ref66.onPersonSelect;
+function AnalyticsView(_ref70) {
+  let data = _ref70.data,
+    onPersonSelect = _ref70.onPersonSelect;
   const _useContext0 = useContext(StagesCtx),
     stages = _useContext0.sorted,
     stageGroups = _useContext0.stageGroups,
@@ -12401,10 +12462,10 @@ function AnalyticsView(_ref66) {
       fontWeight: 700,
       color: "#e2e8f0"
     }
-  }, totalExits)), roleTotals.map(_ref67 => {
-    let _ref68 = _slicedToArray(_ref67, 2),
-      role = _ref68[0],
-      v = _ref68[1];
+  }, totalExits)), roleTotals.map(_ref71 => {
+    let _ref72 = _slicedToArray(_ref71, 2),
+      role = _ref72[0],
+      v = _ref72[1];
     const ri = roleMap[role];
     return React.createElement("div", {
       key: role,
@@ -12682,9 +12743,9 @@ function AnalyticsView(_ref66) {
     }
   }, "\u0411\u043E\u043B\u044C\u0448\u043E\u0435 \u03C3 \u2014 \u043D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0435 \u043F\u0440\u043E\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435 \u044D\u0442\u0430\u043F\u0430. \u0421\u0442\u043E\u0438\u0442 \u043F\u043E\u0441\u043C\u043E\u0442\u0440\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0440\u0438\u0438 \u0442\u044F\u043D\u0443\u0442 \u0432\u0432\u0435\u0440\u0445."))));
 }
-function ChangelogModal(_ref69) {
-  let entries = _ref69.entries,
-    onClose = _ref69.onClose;
+function ChangelogModal(_ref73) {
+  let entries = _ref73.entries,
+    onClose = _ref73.onClose;
   function fmtTs(ts) {
     const d = new Date(ts);
     const pad = n => String(n).padStart(2, "0");
@@ -12741,9 +12802,9 @@ function ChangelogModal(_ref69) {
     onClick: onClose
   }, "\u0417\u0430\u043A\u0440\u044B\u0442\u044C")));
 }
-function DayShiftsModal(_ref70) {
-  let data = _ref70.data,
-    onClose = _ref70.onClose;
+function DayShiftsModal(_ref74) {
+  let data = _ref74.data,
+    onClose = _ref74.onClose;
   const _useContext1 = useContext(StagesCtx),
     stageMap = _useContext1.stageMap;
   const tomorrow = new Date();
@@ -12763,16 +12824,16 @@ function DayShiftsModal(_ref70) {
       if (!byPerson[t.person]) byPerson[t.person] = [];
       byPerson[t.person].push(t);
     });
-    return Object.entries(byPerson).sort((_ref71, _ref72) => {
-      let _ref73 = _slicedToArray(_ref71, 1),
-        a = _ref73[0];
-      let _ref74 = _slicedToArray(_ref72, 1),
-        b = _ref74[0];
+    return Object.entries(byPerson).sort((_ref75, _ref76) => {
+      let _ref77 = _slicedToArray(_ref75, 1),
+        a = _ref77[0];
+      let _ref78 = _slicedToArray(_ref76, 1),
+        b = _ref78[0];
       return a.localeCompare(b);
-    }).map(_ref75 => {
-      let _ref76 = _slicedToArray(_ref75, 2),
-        person = _ref76[0],
-        tasks = _ref76[1];
+    }).map(_ref79 => {
+      let _ref80 = _slicedToArray(_ref79, 2),
+        person = _ref80[0],
+        tasks = _ref80[1];
       return {
         person,
         tasks
@@ -12787,9 +12848,9 @@ function DayShiftsModal(_ref70) {
       s += "Смен нет\n";
       return s;
     }
-    shifts.forEach(_ref77 => {
-      let person = _ref77.person,
-        tasks = _ref77.tasks;
+    shifts.forEach(_ref81 => {
+      let person = _ref81.person,
+        tasks = _ref81.tasks;
       const totalH = tasks.reduce((acc, t) => (Number(t.to) || 0) - (Number(t.from) || 0) + acc, 0);
       s += `👤 ${person}  (${totalH}ч)\n`;
       tasks.forEach(t => {
@@ -12853,10 +12914,10 @@ function DayShiftsModal(_ref70) {
       flexDirection: "column",
       gap: 16
     }
-  }, shifts.map(_ref78 => {
+  }, shifts.map(_ref82 => {
     var _pInfo$roles;
-    let person = _ref78.person,
-      tasks = _ref78.tasks;
+    let person = _ref82.person,
+      tasks = _ref82.tasks;
     const totalH = tasks.reduce((acc, t) => (Number(t.to) || 0) - (Number(t.from) || 0) + acc, 0);
     const pInfo = data.people.find(p => p.name === person);
     const roleId = pInfo === null || pInfo === void 0 || (_pInfo$roles = pInfo.roles) === null || _pInfo$roles === void 0 ? void 0 : _pInfo$roles[0];
@@ -12982,14 +13043,14 @@ function DayShiftsModal(_ref70) {
     }));
   })));
 }
-function PersonCard(_ref79) {
+function PersonCard(_ref83) {
   var _person$roles, _roleMap$person$roles, _Object$entries$sort$;
-  let personId = _ref79.personId,
-    data = _ref79.data,
-    onBack = _ref79.onBack,
-    onUpdatePeople = _ref79.onUpdatePeople,
-    canEditBirthday = _ref79.canEditBirthday,
-    canEditAbsences = _ref79.canEditAbsences;
+  let personId = _ref83.personId,
+    data = _ref83.data,
+    onBack = _ref83.onBack,
+    onUpdatePeople = _ref83.onUpdatePeople,
+    canEditBirthday = _ref83.canEditBirthday,
+    canEditAbsences = _ref83.canEditAbsences;
   const _useContext10 = useContext(StagesCtx),
     stageMap = _useContext10.stageMap;
   const _useState149 = useState("load"),
@@ -13716,16 +13777,16 @@ function PersonCard(_ref79) {
       if (!byDay[t.day]) byDay[t.day] = [];
       byDay[t.day].push(t);
     });
-    return Object.entries(byDay).sort((_ref80, _ref81) => {
-      let _ref82 = _slicedToArray(_ref80, 1),
-        a = _ref82[0];
-      let _ref83 = _slicedToArray(_ref81, 1),
-        b = _ref83[0];
+    return Object.entries(byDay).sort((_ref84, _ref85) => {
+      let _ref86 = _slicedToArray(_ref84, 1),
+        a = _ref86[0];
+      let _ref87 = _slicedToArray(_ref85, 1),
+        b = _ref87[0];
       return daySort(a).localeCompare(daySort(b));
-    }).map(_ref84 => {
-      let _ref85 = _slicedToArray(_ref84, 2),
-        day = _ref85[0],
-        dt = _ref85[1];
+    }).map(_ref88 => {
+      let _ref89 = _slicedToArray(_ref88, 2),
+        day = _ref89[0],
+        dt = _ref89[1];
       return React.createElement("div", {
         key: day,
         style: {
@@ -13840,9 +13901,9 @@ function PersonCard(_ref79) {
   }, {
     l: "ПЛАН Ч/НЕД · 12 НЕД",
     v: avgHrsW.toFixed(1)
-  }].map(_ref86 => {
-    let l = _ref86.l,
-      v = _ref86.v;
+  }].map(_ref90 => {
+    let l = _ref90.l,
+      v = _ref90.v;
     return React.createElement("div", {
       key: l,
       style: {
@@ -13985,11 +14046,11 @@ function PersonCard(_ref79) {
     }
   }, "\u0410\u0447\u0438\u0432\u043A\u0438 \u043F\u043E\u044F\u0432\u044F\u0442\u0441\u044F \u043F\u043E \u043C\u0435\u0440\u0435 \u0438\u0441\u0442\u043E\u0440\u0438\u0438"))));
 }
-function TodayView(_ref87) {
-  let data = _ref87.data,
-    conflictDetails = _ref87.conflictDetails,
-    onNavigateConflicts = _ref87.onNavigateConflicts,
-    canEdit = _ref87.canEdit;
+function TodayView(_ref91) {
+  let data = _ref91.data,
+    conflictDetails = _ref91.conflictDetails,
+    onNavigateConflicts = _ref91.onNavigateConflicts,
+    canEdit = _ref91.canEdit;
   const _useContext11 = useContext(StagesCtx),
     stageMap = _useContext11.stageMap;
   const today = useMemo(() => {
@@ -14057,11 +14118,11 @@ function TodayView(_ref87) {
     const diff = Math.round((d - today) / 86400000);
     return diff === 0 ? "\u0441\u0435\u0433\u043e\u0434\u043d\u044f" : diff === 1 ? "\u0437\u0430\u0432\u0442\u0440\u0430" : `\u0447\u0435\u0440\u0435\u0437 ${diff} \u0434\u043d.`;
   }
-  function Block(_ref88) {
-    let title = _ref88.title,
-      count = _ref88.count,
-      color = _ref88.color,
-      children = _ref88.children;
+  function Block(_ref92) {
+    let title = _ref92.title,
+      count = _ref92.count,
+      color = _ref92.color,
+      children = _ref92.children;
     return React.createElement("div", {
       style: {
         background: "rgba(30,41,59,.72)",
@@ -14097,8 +14158,8 @@ function TodayView(_ref87) {
       }
     }, children));
   }
-  function TasksBlock(_ref89) {
-    let tasks = _ref89.tasks;
+  function TasksBlock(_ref93) {
+    let tasks = _ref93.tasks;
     const byProj = groupByProj(tasks);
     if (!byProj.length) return React.createElement("div", {
       style: {
@@ -14106,10 +14167,10 @@ function TodayView(_ref87) {
         fontSize: 14
       }
     }, "\u0421\u043c\u0435\u043d \u043d\u0435\u0442");
-    return byProj.map(_ref90 => {
-      let _ref91 = _slicedToArray(_ref90, 2),
-        pid = _ref91[0],
-        pts = _ref91[1];
+    return byProj.map(_ref94 => {
+      let _ref95 = _slicedToArray(_ref94, 2),
+        pid = _ref95[0],
+        pts = _ref95[1];
       const proj = data.projects.find(p => p.id === pid);
       const grouped = groupTodayTasks(pts);
       return React.createElement("div", {
@@ -14332,10 +14393,10 @@ function TodayView(_ref87) {
     tasks: datTasks
   })))));
 }
-function SeriesCard(_ref92) {
-  let seriesId = _ref92.seriesId,
-    data = _ref92.data,
-    onBatchUpdate = _ref92.onBatchUpdate;
+function SeriesCard(_ref96) {
+  let seriesId = _ref96.seriesId,
+    data = _ref96.data,
+    onBatchUpdate = _ref96.onBatchUpdate;
   const holidays = useContext(HolidaysCtx);
   const _useState159 = useState("general"),
     _useState160 = _slicedToArray(_useState159, 2),
@@ -14523,9 +14584,9 @@ function SeriesCard(_ref92) {
       overflow: "hidden",
       width: "fit-content"
     }
-  }, TABS.map(_ref93 => {
-    let id = _ref93.id,
-      label = _ref93.label;
+  }, TABS.map(_ref97 => {
+    let id = _ref97.id,
+      label = _ref97.label;
     return React.createElement("button", {
       key: id,
       onClick: () => setTab(id),
@@ -15182,18 +15243,18 @@ function SeriesCard(_ref92) {
     onClick: createChecklist
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"))));
 }
-function ProjectCard(_ref94) {
-  let projectId = _ref94.projectId,
-    data = _ref94.data,
-    onUpdate = _ref94.onUpdate,
-    onBatchUpdate = _ref94.onBatchUpdate,
-    onBack = _ref94.onBack,
-    onSeriesSelect = _ref94.onSeriesSelect,
-    onDelete = _ref94.onDelete,
-    onLog = _ref94.onLog,
-    canDeleteStructure = _ref94.canDeleteStructure,
-    canEditProject = _ref94.canEditProject,
-    canManageProjectAssignments = _ref94.canManageProjectAssignments;
+function ProjectCard(_ref98) {
+  let projectId = _ref98.projectId,
+    data = _ref98.data,
+    onUpdate = _ref98.onUpdate,
+    onBatchUpdate = _ref98.onBatchUpdate,
+    onBack = _ref98.onBack,
+    onSeriesSelect = _ref98.onSeriesSelect,
+    onDelete = _ref98.onDelete,
+    onLog = _ref98.onLog,
+    canDeleteStructure = _ref98.canDeleteStructure,
+    canEditProject = _ref98.canEditProject,
+    canManageProjectAssignments = _ref98.canManageProjectAssignments;
   const _useContext12 = useContext(StagesCtx),
     stages = _useContext12.sorted,
     stageGroups = _useContext12.stageGroups,
@@ -15206,10 +15267,6 @@ function ProjectCard(_ref94) {
     _useState172 = _slicedToArray(_useState171, 2),
     editSeries = _useState172[0],
     setEditSeries = _useState172[1];
-  const _useState173 = useState({}),
-    _useState174 = _slicedToArray(_useState173, 2),
-    showPwd = _useState174[0],
-    setShowPwd = _useState174[1];
   const kppDragRef = useRef(null);
   const proj = data.projects.find(p => p.id === projectId);
   if (!proj) return React.createElement("div", {
@@ -15406,9 +15463,9 @@ function ProjectCard(_ref94) {
       overflow: "hidden",
       width: "fit-content"
     }
-  }, TABS.map(_ref95 => {
-    let id = _ref95.id,
-      label = _ref95.label;
+  }, TABS.map(_ref99 => {
+    let id = _ref99.id,
+      label = _ref99.label;
     return React.createElement("button", {
       key: id,
       onClick: () => setTab(id),
@@ -16123,10 +16180,10 @@ function ProjectCard(_ref94) {
       gridTemplateColumns: "1fr 1fr",
       gap: 12
     }
-  }, [["ТИП КОНТЕНТА", "type"], ["ХРОНОМЕТРАЖ", "duration"], ["ПУТЬ НА СЕРВЕРЕ", "serverPath"], ["ПРИНИМАЮЩИЙ ПРОДЮСЕР", "receivingProducer"], ["ТЕЛЕФОН ПР. ПРОДЮСЕРА", "receivingProducerPhone"], ["ТЕЛЕФОН МЕНЕДЖЕРА", "managerPhone"], ["КОЛ-ВО ВЕРСИЙ", "versions"], ["РЕКЛАМНЫЙ ХРОНОМЕТРАЖ", "adRules"], ["РАСПИСАНИЕ ЭФИРА", "airSchedule"], ["СПОСОБ ДОСТАВКИ", "deliveryMethod"]].map(_ref96 => {
-    let _ref97 = _slicedToArray(_ref96, 2),
-      l = _ref97[0],
-      f = _ref97[1];
+  }, [["ТИП КОНТЕНТА", "type"], ["ХРОНОМЕТРАЖ", "duration"], ["ПУТЬ НА СЕРВЕРЕ", "serverPath"], ["ПРИНИМАЮЩИЙ ПРОДЮСЕР", "receivingProducer"], ["ТЕЛЕФОН ПР. ПРОДЮСЕРА", "receivingProducerPhone"], ["ТЕЛЕФОН МЕНЕДЖЕРА", "managerPhone"], ["КОЛ-ВО ВЕРСИЙ", "versions"], ["РЕКЛАМНЫЙ ХРОНОМЕТРАЖ", "adRules"], ["РАСПИСАНИЕ ЭФИРА", "airSchedule"], ["СПОСОБ ДОСТАВКИ", "deliveryMethod"]].map(_ref100 => {
+    let _ref101 = _slicedToArray(_ref100, 2),
+      l = _ref101[0],
+      f = _ref101[1];
     return React.createElement("div", {
       key: f
     }, React.createElement("label", {
@@ -16236,7 +16293,44 @@ function ProjectCard(_ref94) {
       flexDirection: "column",
       gap: 16
     }
-  }, [{
+  }, React.createElement("div", {
+    style: {
+      background: "rgba(30,41,59,.72)",
+      borderRadius: 16,
+      padding: 20,
+      border: "1px solid rgba(245,158,11,.35)"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: "#fbbf24",
+      marginBottom: 8
+    }
+  }, "\u0420\u0435\u043A\u0432\u0438\u0437\u0438\u0442\u044B \u0434\u043E\u0441\u0442\u0443\u043F\u0430 \u0441\u043A\u0440\u044B\u0442\u044B"), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94a3b8",
+      lineHeight: 1.6
+    }
+  }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u0440\u0430\u043D\u0435\u0435 \u043B\u043E\u0433\u0438\u043D\u044B, \u043F\u0430\u0440\u043E\u043B\u0438 \u0438 \u0442\u043E\u043A\u0435\u043D\u044B \u043D\u0435 \u043F\u0435\u0440\u0435\u0434\u0430\u044E\u0442\u0441\u044F \u0432 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435. \u0414\u043E \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u044F \u043F\u0435\u0440\u0435\u043D\u043E\u0441\u0430 \u043E\u043D\u0438 \u043E\u0441\u0442\u0430\u044E\u0442\u0441\u044F \u0432 \u0438\u0441\u0445\u043E\u0434\u043D\u043E\u0439 \u0431\u0430\u0437\u0435 \u0431\u0435\u0437 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439."), (dossier.accesses || []).length > 0 && React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 12
+    }
+  }, (dossier.accesses || []).map((item, idx) => React.createElement("span", {
+    key: item.id || idx,
+    style: {
+      fontSize: 11,
+      color: "#cbd5e1",
+      background: "#0f172a",
+      border: "1px solid #334155",
+      borderRadius: 999,
+      padding: "5px 9px"
+    }
+  }, item.label || `Запись ${idx + 1}`, item.credentialsStored ? " · сохранено в защищённом контуре" : "")))), [{
     key: "paths",
     title: "Пути на сервере",
     fields: [{
@@ -16249,25 +16343,6 @@ function ProjectCard(_ref94) {
     empty: {
       label: "",
       path: ""
-    }
-  }, {
-    key: "accesses",
-    title: "Доступы",
-    fields: [{
-      k: "label",
-      ph: "Название"
-    }, {
-      k: "login",
-      ph: "Логин"
-    }, {
-      k: "password",
-      ph: "Пароль",
-      pwd: true
-    }],
-    empty: {
-      label: "",
-      login: "",
-      password: ""
     }
   }, {
     key: "links",
@@ -16283,11 +16358,11 @@ function ProjectCard(_ref94) {
       label: "",
       url: ""
     }
-  }].map(_ref98 => {
-    let key = _ref98.key,
-      title = _ref98.title,
-      fields = _ref98.fields,
-      empty = _ref98.empty;
+  }].map(_ref102 => {
+    let key = _ref102.key,
+      title = _ref102.title,
+      fields = _ref102.fields,
+      empty = _ref102.empty;
     const items = dossier[key] || [];
     return React.createElement("div", {
       key: key,
@@ -16329,12 +16404,9 @@ function ProjectCard(_ref94) {
         marginBottom: 8,
         alignItems: "center"
       }
-    }, fields.map(_ref99 => {
-      let k = _ref99.k,
-        ph = _ref99.ph,
-        pwd = _ref99.pwd;
-      const pwKey = `${key}-${idx}-${k}`;
-      const shown = showPwd[pwKey];
+    }, fields.map(_ref103 => {
+      let k = _ref103.k,
+        ph = _ref103.ph;
       return React.createElement("div", {
         key: k,
         style: {
@@ -16342,7 +16414,7 @@ function ProjectCard(_ref94) {
           position: "relative"
         }
       }, React.createElement("input", {
-        type: pwd && !shown ? "password" : "text",
+        type: "text",
         defaultValue: item[k] || "",
         placeholder: ph,
         style: iSt,
@@ -16356,24 +16428,7 @@ function ProjectCard(_ref94) {
             upDoss(key, ni);
           }
         }
-      }), pwd && React.createElement("button", {
-        onClick: () => setShowPwd(p => ({
-          ...p,
-          [pwKey]: !p[pwKey]
-        })),
-        style: {
-          position: "absolute",
-          right: 8,
-          top: "50%",
-          transform: "translateY(-50%)",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "#475569",
-          fontSize: 14,
-          padding: 0
-        }
-      }, shown ? "" : ""));
+      }));
     }), React.createElement("button", {
       onClick: () => upDoss(key, items.filter((_, i) => i !== idx)),
       style: {
@@ -16415,20 +16470,20 @@ function ProjectCard(_ref94) {
     onClose: () => setEditSeries(null)
   }));
 }
-function CommandPalette(_ref100) {
-  let data = _ref100.data,
-    onClose = _ref100.onClose,
-    onNavigate = _ref100.onNavigate,
-    onSetView = _ref100.onSetView,
-    onSetGanttDay = _ref100.onSetGanttDay;
-  const _useState175 = useState(""),
+function CommandPalette(_ref104) {
+  let data = _ref104.data,
+    onClose = _ref104.onClose,
+    onNavigate = _ref104.onNavigate,
+    onSetView = _ref104.onSetView,
+    onSetGanttDay = _ref104.onSetGanttDay;
+  const _useState173 = useState(""),
+    _useState174 = _slicedToArray(_useState173, 2),
+    query = _useState174[0],
+    setQuery = _useState174[1];
+  const _useState175 = useState(0),
     _useState176 = _slicedToArray(_useState175, 2),
-    query = _useState176[0],
-    setQuery = _useState176[1];
-  const _useState177 = useState(0),
-    _useState178 = _slicedToArray(_useState177, 2),
-    selIdx = _useState178[0],
-    setSelIdx = _useState178[1];
+    selIdx = _useState176[0],
+    setSelIdx = _useState176[1];
   const inputRef = useRef(null);
   const listRef = useRef(null);
   useEffect(() => {
@@ -16959,8 +17014,8 @@ async function doLogout() {
   });
   setCsrfToken("");
 }
-function FlipUnit(_ref101) {
-  let digit = _ref101.digit;
+function FlipUnit(_ref105) {
+  let digit = _ref105.digit;
   const _React$useState3 = React.useState(false),
     _React$useState4 = _slicedToArray(_React$useState3, 2),
     rolling = _React$useState4[0],
@@ -17059,9 +17114,9 @@ function FlipClock() {
     digit: s % 10
   }));
 }
-function LoginForm(_ref102) {
-  let onLogin = _ref102.onLogin,
-    error = _ref102.error;
+function LoginForm(_ref106) {
+  let onLogin = _ref106.onLogin,
+    error = _ref106.error;
   const _React$useState7 = React.useState(""),
     _React$useState8 = _slicedToArray(_React$useState7, 2),
     l = _React$useState8[0],
@@ -17167,9 +17222,9 @@ function LoginForm(_ref102) {
     }
   }, "\u0412\u043E\u0439\u0442\u0438")));
 }
-function UsersView(_ref103) {
-  let user = _ref103.user,
-    onUserUpdate = _ref103.onUserUpdate;
+function UsersView(_ref107) {
+  let user = _ref107.user,
+    onUserUpdate = _ref107.onUserUpdate;
   const _React$useState1 = React.useState([]),
     _React$useState10 = _slicedToArray(_React$useState1, 2),
     users = _React$useState10[0],
@@ -17466,10 +17521,10 @@ const MT = {
 };
 function useIsMobile() {
   let maxWidth = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 760;
-  const _useState179 = useState(() => typeof window !== "undefined" ? window.innerWidth <= maxWidth : false),
-    _useState180 = _slicedToArray(_useState179, 2),
-    isMobile = _useState180[0],
-    setIsMobile = _useState180[1];
+  const _useState177 = useState(() => typeof window !== "undefined" ? window.innerWidth <= maxWidth : false),
+    _useState178 = _slicedToArray(_useState177, 2),
+    isMobile = _useState178[0],
+    setIsMobile = _useState178[1];
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
     const onChange = () => setIsMobile(mq.matches);
@@ -17479,22 +17534,22 @@ function useIsMobile() {
   }, [maxWidth]);
   return isMobile;
 }
-function MobilePanel(_ref104) {
-  let children = _ref104.children,
-    style = _ref104.style,
-    onClick = _ref104.onClick;
+function MobilePanel(_ref108) {
+  let children = _ref108.children,
+    style = _ref108.style,
+    onClick = _ref108.onClick;
   return React.createElement("div", {
     className: "ppt-mobile-panel",
     onClick: onClick,
     style: style
   }, children);
 }
-function MobileTopbar(_ref105) {
-  let user = _ref105.user,
-    syncState = _ref105.syncState,
-    onSearch = _ref105.onSearch,
-    onLogout = _ref105.onLogout,
-    onShifts = _ref105.onShifts;
+function MobileTopbar(_ref109) {
+  let user = _ref109.user,
+    syncState = _ref109.syncState,
+    onSearch = _ref109.onSearch,
+    onLogout = _ref109.onLogout,
+    onShifts = _ref109.onShifts;
   return React.createElement("div", {
     className: "ppt-mobile-topbar"
   }, React.createElement("div", null, React.createElement("div", {
@@ -17520,11 +17575,11 @@ function MobileTopbar(_ref105) {
     onClick: onLogout
   }, MT.logout)));
 }
-function MobileBottomNav(_ref106) {
-  let tabs = _ref106.tabs,
-    view = _ref106.view,
-    setView = _ref106.setView,
-    navigate = _ref106.navigate;
+function MobileBottomNav(_ref110) {
+  let tabs = _ref110.tabs,
+    view = _ref110.view,
+    setView = _ref110.setView,
+    navigate = _ref110.navigate;
   const allowed = new Set(["today", "calendar", "projects", "people", "conflicts"]);
   const items = tabs.filter(t => allowed.has(t.id)).slice(0, 5);
   const labels = {
@@ -17559,11 +17614,11 @@ function groupMobileTasks(tasks) {
   });
   return Object.values(m).sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0) || String(a.project || "").localeCompare(String(b.project || "")) || String(a.series || "").localeCompare(String(b.series || "")));
 }
-function MobileTaskGroup(_ref107) {
-  let group = _ref107.group,
-    data = _ref107.data,
-    onOpenProject = _ref107.onOpenProject,
-    onOpenPerson = _ref107.onOpenPerson;
+function MobileTaskGroup(_ref111) {
+  let group = _ref111.group,
+    data = _ref111.data,
+    onOpenProject = _ref111.onOpenProject,
+    onOpenPerson = _ref111.onOpenPerson;
   const proj = (data.projects || []).find(p => p.id === group.project);
   const people = group.people || [];
   return React.createElement("div", {
@@ -17600,11 +17655,11 @@ function MobileTaskGroup(_ref107) {
     }, name);
   }))));
 }
-function MobileTaskRow(_ref108) {
-  let task = _ref108.task,
-    data = _ref108.data,
-    onOpenProject = _ref108.onOpenProject,
-    onOpenPerson = _ref108.onOpenPerson;
+function MobileTaskRow(_ref112) {
+  let task = _ref112.task,
+    data = _ref112.data,
+    onOpenProject = _ref112.onOpenProject,
+    onOpenPerson = _ref112.onOpenPerson;
   return React.createElement(MobileTaskGroup, {
     group: {
       ...task,
@@ -17647,12 +17702,12 @@ function mobileDayInfo(data, day) {
     count: tasks.length + airs.length + milestones.length + bdays.length
   };
 }
-function MobileToday(_ref109) {
-  let data = _ref109.data,
-    conflictDetails = _ref109.conflictDetails,
-    onOpenProject = _ref109.onOpenProject,
-    onOpenPerson = _ref109.onOpenPerson,
-    onConflicts = _ref109.onConflicts;
+function MobileToday(_ref113) {
+  let data = _ref113.data,
+    conflictDetails = _ref113.conflictDetails,
+    onOpenProject = _ref113.onOpenProject,
+    onOpenPerson = _ref113.onOpenPerson,
+    onConflicts = _ref113.onConflicts;
   const todayStr = formatDate(new Date());
   const tomorrowStr = addDays(todayStr, 1);
   const todayTasks = (data.tasks || []).filter(t => !t.deleted && !t.cancelled && t.day === todayStr).sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0));
@@ -17701,20 +17756,20 @@ function MobileToday(_ref109) {
     className: "ppt-mobile-empty"
   }, MT.noShifts)));
 }
-function MobileCalendar(_ref110) {
-  let data = _ref110.data,
-    onOpenProject = _ref110.onOpenProject,
-    onOpenPerson = _ref110.onOpenPerson;
+function MobileCalendar(_ref114) {
+  let data = _ref114.data,
+    onOpenProject = _ref114.onOpenProject,
+    onOpenPerson = _ref114.onOpenPerson;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const _useState181 = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
+  const _useState179 = useState(() => new Date(today.getFullYear(), today.getMonth(), 1)),
+    _useState180 = _slicedToArray(_useState179, 2),
+    cursor = _useState180[0],
+    setCursor = _useState180[1];
+  const _useState181 = useState(() => formatDate(today)),
     _useState182 = _slicedToArray(_useState181, 2),
-    cursor = _useState182[0],
-    setCursor = _useState182[1];
-  const _useState183 = useState(() => formatDate(today)),
-    _useState184 = _slicedToArray(_useState183, 2),
-    selected = _useState184[0],
-    setSelected = _useState184[1];
+    selected = _useState182[0],
+    setSelected = _useState182[1];
   const year = cursor.getFullYear(),
     month = cursor.getMonth();
   const cells = useMemo(() => {
@@ -17780,9 +17835,9 @@ function MobileCalendar(_ref110) {
   }, React.createElement("strong", null, dayLabel(selected)), React.createElement("span", null, selectedInfo.count)), selectedInfo.bdays.map(p => React.createElement("div", {
     key: `b${p.id || p.name}`,
     className: "ppt-mobile-calendar-note birthday"
-  }, MT.birthdayShort, " ", p.name)), selectedInfo.airs.map((_ref111, i) => {
-    let proj = _ref111.proj,
-      ser = _ref111.ser;
+  }, MT.birthdayShort, " ", p.name)), selectedInfo.airs.map((_ref115, i) => {
+    let proj = _ref115.proj,
+      ser = _ref115.ser;
     return React.createElement("div", {
       key: `a${proj.id}${ser.id}${i}`,
       className: "ppt-mobile-calendar-note air",
@@ -17806,9 +17861,9 @@ function MobileCalendar(_ref110) {
     className: "ppt-mobile-empty"
   }, MT.noEvents)));
 }
-function MobileProjects(_ref112) {
-  let data = _ref112.data,
-    onOpenProject = _ref112.onOpenProject;
+function MobileProjects(_ref116) {
+  let data = _ref116.data,
+    onOpenProject = _ref116.onOpenProject;
   const today = formatDate(new Date());
   const projects = (data.projects || []).filter(p => p.status !== MT.archive);
   return React.createElement("div", {
@@ -17833,13 +17888,13 @@ function MobileProjects(_ref112) {
     }, React.createElement("span", null, seriesCount, " ", MT.series), React.createElement("span", null, todayCount, " ", MT.todayLower), React.createElement("span", null, tasks.length, " ", MT.shiftShort)));
   }));
 }
-function MobilePeople(_ref113) {
-  let data = _ref113.data,
-    onOpenPerson = _ref113.onOpenPerson;
-  const _useState185 = useState(""),
-    _useState186 = _slicedToArray(_useState185, 2),
-    q = _useState186[0],
-    setQ = _useState186[1];
+function MobilePeople(_ref117) {
+  let data = _ref117.data,
+    onOpenPerson = _ref117.onOpenPerson;
+  const _useState183 = useState(""),
+    _useState184 = _slicedToArray(_useState183, 2),
+    q = _useState184[0],
+    setQ = _useState184[1];
   const today = formatDate(new Date());
   const people = (data.people || []).filter(p => p.active !== false && !p.deleted).filter(p => !q.trim() || String(p.name || "").toLowerCase().includes(q.trim().toLowerCase()));
   return React.createElement("div", {
@@ -17864,12 +17919,12 @@ function MobilePeople(_ref113) {
     className: "ppt-mobile-empty"
   }, MT.noPeople)));
 }
-function MobileWorkspace(_ref114) {
-  let view = _ref114.view,
-    data = _ref114.data,
-    conflictDetails = _ref114.conflictDetails,
-    setView = _ref114.setView,
-    navigate = _ref114.navigate;
+function MobileWorkspace(_ref118) {
+  let view = _ref118.view,
+    data = _ref118.data,
+    conflictDetails = _ref118.conflictDetails,
+    setView = _ref118.setView,
+    navigate = _ref118.navigate;
   const openProject = id => navigate({
     type: "project",
     id
@@ -17905,47 +17960,47 @@ function MobileWorkspace(_ref114) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState187 = useState(null),
+  const _useState185 = useState(null),
+    _useState186 = _slicedToArray(_useState185, 2),
+    rawData = _useState186[0],
+    setRawData = _useState186[1];
+  const _useState187 = useState("today"),
     _useState188 = _slicedToArray(_useState187, 2),
-    rawData = _useState188[0],
-    setRawData = _useState188[1];
-  const _useState189 = useState("today"),
+    view = _useState188[0],
+    setView = _useState188[1];
+  const _useState189 = useState(() => parseHash()),
     _useState190 = _slicedToArray(_useState189, 2),
-    view = _useState190[0],
-    setView = _useState190[1];
-  const _useState191 = useState(() => parseHash()),
+    navState = _useState190[0],
+    setNavState = _useState190[1];
+  const _useState191 = useState("ok"),
     _useState192 = _slicedToArray(_useState191, 2),
-    navState = _useState192[0],
-    setNavState = _useState192[1];
-  const _useState193 = useState("ok"),
+    syncState = _useState192[0],
+    setSyncState = _useState192[1];
+  const _useState193 = useState(""),
     _useState194 = _slicedToArray(_useState193, 2),
-    syncState = _useState194[0],
-    setSyncState = _useState194[1];
-  const _useState195 = useState(""),
+    syncError = _useState194[0],
+    setSyncError = _useState194[1];
+  const _useState195 = useState(false),
     _useState196 = _slicedToArray(_useState195, 2),
-    syncError = _useState196[0],
-    setSyncError = _useState196[1];
-  const _useState197 = useState(false),
+    dayShiftsModal = _useState196[0],
+    setDayShiftsModal = _useState196[1];
+  const _useState197 = useState(null),
     _useState198 = _slicedToArray(_useState197, 2),
-    dayShiftsModal = _useState198[0],
-    setDayShiftsModal = _useState198[1];
-  const _useState199 = useState(null),
+    ganttDay = _useState198[0],
+    setGanttDay = _useState198[1];
+  const _useState199 = useState(false),
     _useState200 = _slicedToArray(_useState199, 2),
-    ganttDay = _useState200[0],
-    setGanttDay = _useState200[1];
-  const _useState201 = useState(false),
-    _useState202 = _slicedToArray(_useState201, 2),
-    cmdPaletteOpen = _useState202[0],
-    setCmdPaletteOpen = _useState202[1];
+    cmdPaletteOpen = _useState200[0],
+    setCmdPaletteOpen = _useState200[1];
   const isMobile = useIsMobile(760);
+  const _useState201 = useState(null),
+    _useState202 = _slicedToArray(_useState201, 2),
+    user = _useState202[0],
+    setUser = _useState202[1];
   const _useState203 = useState(null),
     _useState204 = _slicedToArray(_useState203, 2),
-    user = _useState204[0],
-    setUser = _useState204[1];
-  const _useState205 = useState(null),
-    _useState206 = _slicedToArray(_useState205, 2),
-    loginError = _useState206[0],
-    setLoginError = _useState206[1];
+    loginError = _useState204[0],
+    setLoginError = _useState204[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
@@ -17970,10 +18025,7 @@ function App() {
     setSyncError("");
     setRawData(merged);
     try {
-      localStorage.setItem(accountBackupKey(backupAccountRef.current), JSON.stringify({
-        ts: merged._savedAt,
-        data: merged
-      }));
+      persistAccountBackup(backupAccountRef.current, merged);
     } catch (e) {}
   }, error => {
     if (!saveTimer.current) {
@@ -18152,9 +18204,11 @@ function App() {
         if (raw) {
           const bk = JSON.parse(raw);
           if (bk !== null && bk !== void 0 && bk.data) {
+            const safeBackup = normalizeLoadedData(bk.data);
+            persistAccountBackup(currentAccount, safeBackup);
             unsavedRef.current = true;
-            serverRevisionRef.current = bk.data._revision ?? null;
-            setRawData(normalizeLoadedData(bk.data));
+            serverRevisionRef.current = safeBackup._revision ?? null;
+            setRawData(safeBackup);
             setSyncState("error");
             setSyncError("Открыта локальная копия. Связь с сервером недоступна.");
             return;
@@ -18170,10 +18224,10 @@ function App() {
   const viewRef = useRef(view);
   viewRef.current = view;
   const pendingLogRef = useRef([]);
-  const _useState207 = useState(false),
-    _useState208 = _slicedToArray(_useState207, 2),
-    changelogOpen = _useState208[0],
-    setChangelogOpen = _useState208[1];
+  const _useState205 = useState(false),
+    _useState206 = _slicedToArray(_useState205, 2),
+    changelogOpen = _useState206[0],
+    setChangelogOpen = _useState206[1];
   useEffect(() => {
     const protectUnsaved = event => {
       var _saveQueueRef$current;
@@ -18212,10 +18266,7 @@ function App() {
     setSyncState("saving");
     setSyncError("");
     try {
-      localStorage.setItem(accountBackupKey(user), JSON.stringify({
-        ts: payload._savedAt,
-        data: payload
-      }));
+      persistAccountBackup(user, payload);
     } catch (e) {}
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
@@ -18226,10 +18277,7 @@ function App() {
       logHistoryRef.current = outgoing.changelog;
       pendingLogRef.current = [];
       try {
-        localStorage.setItem(accountBackupKey(user), JSON.stringify({
-          ts: outgoing._savedAt,
-          data: outgoing
-        }));
+        persistAccountBackup(user, outgoing);
       } catch (e) {}
       saveQueueRef.current.enqueue(outgoing);
     }, 1000);
@@ -18397,10 +18445,10 @@ function App() {
       const merged = {
         ...d
       };
-      for (const _ref115 of Object.entries(changes)) {
-        var _ref116 = _slicedToArray(_ref115, 2);
-        const key = _ref116[0];
-        const val = _ref116[1];
+      for (const _ref119 of Object.entries(changes)) {
+        var _ref120 = _slicedToArray(_ref119, 2);
+        const key = _ref120[0];
+        const val = _ref120[1];
         if (SOFT_DELETE_KEYS.includes(key) && Array.isArray(val)) {
           const deletedItems = (d[key] || []).filter(x => x.deleted);
           merged[key] = [...val, ...deletedItems.filter(x => !val.some(v => String(v.id) === String(x.id)))];
@@ -18900,10 +18948,10 @@ function App() {
       padding: 3,
       boxShadow: "inset 0 1px 0 rgba(255,255,255,.035)"
     }
-  }, TABS.map(_ref117 => {
-    let id = _ref117.id,
-      label = _ref117.label,
-      warn = _ref117.warn;
+  }, TABS.map(_ref121 => {
+    let id = _ref121.id,
+      label = _ref121.label,
+      warn = _ref121.warn;
     return React.createElement("button", {
       key: id,
       onClick: () => {
