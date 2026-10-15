@@ -12772,6 +12772,8 @@ const AUDIT_ACTION_LABELS = {
   cancel: "Отменено",
   restore: "Восстановлено",
   delete: "Удалено",
+  approve: "Согласовано",
+  reject: "Отклонено",
   save: "Сохранено"
 };
 const AUDIT_ENTITY_LABELS = {
@@ -12781,6 +12783,7 @@ const AUDIT_ENTITY_LABELS = {
   productionBlock: "Блок продюсерской",
   productionGroup: "Группа задач",
   productionTask: "Задача продюсерской",
+  productionApproval: "Согласование",
   person: "Сотрудник",
   role: "Роль",
   stage: "Этап",
@@ -12803,6 +12806,13 @@ const AUDIT_FIELD_LABELS = {
   responsible_name: "Ответственный",
   owner_name: "Ответственный за блок",
   group_id: "Группа",
+  task_id: "Связанная задача",
+  required: "Обязательное",
+  due_date: "Срок решения",
+  decision: "Решение",
+  decision_comment: "Комментарий",
+  decided_by_name: "Решение принял",
+  decided_at: "Решение принято",
   start_date: "Начало",
   deadline: "Срок",
   completed_at: "Выполнено в",
@@ -12828,6 +12838,10 @@ const AUDIT_FIELD_LABELS = {
   note: "Заметка",
   notes: "Заметки"
 };
+function auditActionLabel(event) {
+  if (event.entity === "productionApproval" && event.action === "restore") return "Возвращено на согласование";
+  return AUDIT_ACTION_LABELS[event.action] || event.action;
+}
 function auditValue(value) {
   if (value === null || value === undefined || value === "") return "—";
   if (value === true) return "да";
@@ -13111,7 +13125,7 @@ function HistoryView(_ref73) {
         fontWeight: 800,
         color: event.action === "delete" ? "#fca5a5" : event.action === "create" ? "#86efac" : "#93c5fd"
       }
-    }, AUDIT_ACTION_LABELS[event.action] || event.action), React.createElement("span", {
+    }, auditActionLabel(event)), React.createElement("span", {
       style: {
         fontSize: 11,
         color: "#cbd5e1",
@@ -18547,7 +18561,9 @@ function ProducerDashboard(_ref127) {
     className: "producer-project-copy"
   }, React.createElement("small", null, project.status || "в работе"), React.createElement("strong", null, project.name), React.createElement("em", null, project.description || "Проект без описания")), React.createElement("span", {
     className: "producer-project-stats"
-  }, React.createElement("b", null, project.completedTasks, "/", project.totalTasks), React.createElement("small", null, "\u0437\u0430\u0434\u0430\u0447 \u0433\u043E\u0442\u043E\u0432\u043E")), React.createElement(ProducerProgress, {
+  }, React.createElement("b", null, project.completedTasks, "/", project.totalTasks), React.createElement("small", null, "\u0437\u0430\u0434\u0430\u0447 \u0433\u043E\u0442\u043E\u0432\u043E")), project.warningCount > 0 && React.createElement("span", {
+    className: "producer-warning-badge"
+  }, "! ", project.warningCount), React.createElement(ProducerProgress, {
     done: project.completedTasks,
     total: project.totalTasks
   }), React.createElement("span", {
@@ -18609,7 +18625,9 @@ function ProducerBlockNode(_ref129) {
     onClick: () => onOpen(block.id)
   }, React.createElement("span", {
     className: "producer-node-status"
-  }, statusLabel), React.createElement("strong", null, block.name), React.createElement("small", null, block.ownerName || "Ответственный не указан"), React.createElement("div", null, React.createElement(ProducerProgress, {
+  }, statusLabel), React.createElement("strong", null, block.name), React.createElement("small", null, block.ownerName || "Ответственный не указан"), block.warningCount > 0 && React.createElement("span", {
+    className: "producer-node-warning"
+  }, "! ", block.warningCount, " \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F"), React.createElement("div", null, React.createElement(ProducerProgress, {
     done: block.completedTasks,
     total: block.totalTasks
   }), React.createElement("time", null, producerDate(block.deadline))));
@@ -19221,8 +19239,191 @@ function ProducerBlockSettings(_ref134) {
     disabled: busy
   }, busy ? "Сохраняю…" : "Сохранить параметры")));
 }
-function ProducerHistory(_ref135) {
-  let events = _ref135.events;
+function ProducerWarnings(_ref135) {
+  let warnings = _ref135.warnings;
+  return React.createElement("section", {
+    className: "producer-warnings" + (warnings.length ? " has-items" : " clear")
+  }, React.createElement("div", {
+    className: "producer-warnings-head"
+  }, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u041A\u041E\u041D\u0422\u0420\u041E\u041B\u042C"), React.createElement("h2", null, "\u041F\u0440\u0435\u0434\u0443\u043F\u0440\u0435\u0436\u0434\u0435\u043D\u0438\u044F")), React.createElement("b", null, warnings.length || "✓")), warnings.length ? React.createElement("div", {
+    className: "producer-warning-list"
+  }, warnings.map(item => React.createElement("article", {
+    className: item.severity,
+    key: item.id
+  }, React.createElement("span", null, "!"), React.createElement("div", null, React.createElement("strong", null, item.title), React.createElement("p", null, item.message)), React.createElement("time", null, producerDate(item.dueDate))))) : React.createElement("p", null, "\u041A\u0440\u0438\u0442\u0438\u0447\u043D\u044B\u0445 \u043F\u0440\u0435\u043F\u044F\u0442\u0441\u0442\u0432\u0438\u0439 \u043F\u043E \u0441\u0440\u043E\u043A\u0430\u043C \u0438 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u044F\u043C \u043D\u0435\u0442."));
+}
+function ProducerApprovalItem(_ref136) {
+  let approval = _ref136.approval,
+    tasks = _ref136.tasks,
+    canDecide = _ref136.canDecide,
+    onDecision = _ref136.onDecision;
+  const _useState233 = useState(approval.decisionComment || ""),
+    _useState234 = _slicedToArray(_useState233, 2),
+    comment = _useState234[0],
+    setComment = _useState234[1];
+  const _useState235 = useState(false),
+    _useState236 = _slicedToArray(_useState235, 2),
+    busy = _useState236[0],
+    setBusy = _useState236[1];
+  useEffect(() => setComment(approval.status === "pending" ? "" : approval.decisionComment || ""), [approval.status, approval.decisionComment]);
+  const linkedTask = tasks.find(task => task.id === approval.taskId);
+  const status = approval.status === "pending" ? "pending" : approval.decision;
+  const labels = {
+    pending: "Ожидает решения",
+    approved: "Согласовано",
+    rejected: "Отклонено"
+  };
+  async function decide(value) {
+    setBusy(true);
+    try {
+      await onDecision(approval.id, value, value ? comment : "");
+    } catch (error) {} finally {
+      setBusy(false);
+    }
+  }
+  return React.createElement("article", {
+    className: "producer-approval " + status
+  }, React.createElement("div", {
+    className: "producer-approval-main"
+  }, React.createElement("div", {
+    className: "producer-approval-title"
+  }, React.createElement("span", null, labels[status] || status), approval.required && React.createElement("b", null, "\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E"), React.createElement("strong", null, approval.title)), React.createElement("p", null, linkedTask ? "Задача: " + linkedTask.title : "Весь блок", approval.dueDate ? " · срок " + producerDate(approval.dueDate) : ""), React.createElement("small", null, "\u0417\u0430\u043F\u0440\u043E\u0441\u0438\u043B: ", approval.requestedByName || "Система", approval.decidedByName ? " · решение: " + approval.decidedByName : ""), approval.decisionComment && approval.status !== "pending" && React.createElement("blockquote", null, approval.decisionComment)), approval.status === "pending" && canDecide && React.createElement("div", {
+    className: "producer-approval-decision"
+  }, React.createElement("input", {
+    "aria-label": "Комментарий к согласованию " + approval.title,
+    value: comment,
+    onChange: e => setComment(e.target.value),
+    placeholder: "\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439 \u043A \u0440\u0435\u0448\u0435\u043D\u0438\u044E"
+  }), React.createElement("div", null, React.createElement("button", {
+    disabled: busy,
+    onClick: () => decide("approved")
+  }, "\u0421\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u0442\u044C"), React.createElement("button", {
+    className: "danger",
+    disabled: busy,
+    onClick: () => decide("rejected")
+  }, "\u041E\u0442\u043A\u043B\u043E\u043D\u0438\u0442\u044C"))), approval.status === "pending" && !canDecide && React.createElement("em", null, "\u0420\u0435\u0448\u0435\u043D\u0438\u0435 \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0442 \u0440\u0443\u043A\u043E\u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044C \u0438\u043B\u0438 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440"), approval.status !== "pending" && canDecide && React.createElement("button", {
+    className: "producer-approval-reopen",
+    disabled: busy,
+    onClick: () => decide(null)
+  }, "\u0412\u0435\u0440\u043D\u0443\u0442\u044C \u043D\u0430 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0435"));
+}
+function ProducerApprovals(_ref137) {
+  let approvals = _ref137.approvals,
+    tasks = _ref137.tasks,
+    canDecide = _ref137.canDecide,
+    onCreate = _ref137.onCreate,
+    onDecision = _ref137.onDecision;
+  const _useState237 = useState(false),
+    _useState238 = _slicedToArray(_useState237, 2),
+    open = _useState238[0],
+    setOpen = _useState238[1];
+  const _useState239 = useState(false),
+    _useState240 = _slicedToArray(_useState239, 2),
+    busy = _useState240[0],
+    setBusy = _useState240[1];
+  const _useState241 = useState({
+      title: "",
+      taskId: "",
+      dueDate: "",
+      required: true
+    }),
+    _useState242 = _slicedToArray(_useState241, 2),
+    draft = _useState242[0],
+    setDraft = _useState242[1];
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await onCreate({
+        ...draft,
+        taskId: draft.taskId || null,
+        dueDate: draft.dueDate || null
+      });
+      setDraft({
+        title: "",
+        taskId: "",
+        dueDate: "",
+        required: true
+      });
+      setOpen(false);
+    } catch (error) {} finally {
+      setBusy(false);
+    }
+  }
+  return React.createElement("section", {
+    className: "producer-approvals-section"
+  }, React.createElement("div", {
+    className: "producer-section-head"
+  }, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u0420\u0415\u0428\u0415\u041D\u0418\u042F"), React.createElement("h2", null, "\u0421\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u044F")), React.createElement("b", null, approvals.filter(item => item.status === "pending").length, " \u043E\u0436\u0438\u0434\u0430\u044E\u0442")), React.createElement("div", {
+    className: "producer-approval-list"
+  }, approvals.length ? approvals.map(item => React.createElement(ProducerApprovalItem, {
+    key: item.id,
+    approval: item,
+    tasks: tasks,
+    canDecide: canDecide,
+    onDecision: onDecision
+  })) : React.createElement("p", {
+    className: "producer-approval-empty"
+  }, "\u0421\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0439 \u0432 \u044D\u0442\u043E\u043C \u0431\u043B\u043E\u043A\u0435 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442.")), !open ? React.createElement("button", {
+    className: "producer-approval-create-open",
+    onClick: () => setOpen(true)
+  }, "\uFF0B \u0417\u0430\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0435") : React.createElement("form", {
+    className: "producer-approval-create",
+    onSubmit: submit
+  }, React.createElement("label", null, "\u0427\u0442\u043E \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u0442\u044C", React.createElement("input", {
+    autoFocus: true,
+    value: draft.title,
+    onChange: e => setDraft({
+      ...draft,
+      title: e.target.value
+    }),
+    placeholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, \u0444\u0438\u043D\u0430\u043B\u044C\u043D\u044B\u0439 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0439",
+    required: true
+  })), React.createElement("div", {
+    className: "producer-form-row"
+  }, React.createElement("label", null, "\u0421\u0432\u044F\u0437\u0430\u043D\u043D\u0430\u044F \u0437\u0430\u0434\u0430\u0447\u0430", React.createElement("select", {
+    value: draft.taskId,
+    onChange: e => setDraft({
+      ...draft,
+      taskId: e.target.value
+    })
+  }, React.createElement("option", {
+    value: ""
+  }, "\u0412\u0435\u0441\u044C \u0431\u043B\u043E\u043A"), tasks.map(task => React.createElement("option", {
+    key: task.id,
+    value: task.id
+  }, task.title)))), React.createElement("label", null, "\u0421\u0440\u043E\u043A \u0440\u0435\u0448\u0435\u043D\u0438\u044F", React.createElement("input", {
+    type: "date",
+    value: draft.dueDate,
+    onChange: e => setDraft({
+      ...draft,
+      dueDate: e.target.value
+    })
+  }))), React.createElement("label", {
+    className: "producer-approval-required"
+  }, React.createElement("input", {
+    type: "checkbox",
+    checked: draft.required,
+    onChange: e => setDraft({
+      ...draft,
+      required: e.target.checked
+    })
+  }), " \u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0435 \u0432\u043B\u0438\u044F\u0435\u0442 \u043D\u0430 \u043F\u0440\u0435\u0434\u0443\u043F\u0440\u0435\u0436\u0434\u0435\u043D\u0438\u044F"), React.createElement("div", {
+    className: "producer-task-editor-actions"
+  }, React.createElement("button", {
+    type: "button",
+    onClick: () => setOpen(false)
+  }, "\u041E\u0442\u043C\u0435\u043D\u0430"), React.createElement("button", {
+    className: "producer-primary",
+    disabled: busy
+  }, busy ? "Сохраняю…" : "Создать запрос"))));
+}
+function ProducerHistory(_ref138) {
+  let events = _ref138.events;
   const actions = {
     create: "Создано",
     update: "Изменено",
@@ -19231,7 +19432,9 @@ function ProducerHistory(_ref135) {
     reschedule: "Изменён срок",
     complete: "Выполнено",
     restore: "Возвращено в работу",
-    delete: "Удалено"
+    delete: "Удалено",
+    approve: "Согласовано",
+    reject: "Отклонено"
   };
   return React.createElement("details", {
     className: "producer-history"
@@ -19239,29 +19442,29 @@ function ProducerHistory(_ref135) {
     var _event$details2;
     return React.createElement("article", {
       key: event.id
-    }, React.createElement("span", null, actions[event.action] || event.action), React.createElement("strong", null, ((_event$details2 = event.details) === null || _event$details2 === void 0 ? void 0 : _event$details2.label) || "Изменение"), React.createElement("small", null, event.userName, " \xB7 ", new Date(event.occurredAt).toLocaleString("ru-RU")));
+    }, React.createElement("span", null, event.entity === "productionApproval" && event.action === "restore" ? "Возвращено на согласование" : actions[event.action] || event.action), React.createElement("strong", null, ((_event$details2 = event.details) === null || _event$details2 === void 0 ? void 0 : _event$details2.label) || "Изменение"), React.createElement("small", null, event.userName, " \xB7 ", new Date(event.occurredAt).toLocaleString("ru-RU")));
   }) : React.createElement("p", null, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0432\u043E\u0433\u043E \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F.")));
 }
-function ProducerBlockPage(_ref136) {
-  let blockId = _ref136.blockId,
-    go = _ref136.go,
-    toast = _ref136.toast;
-  const _useState233 = useState(null),
-    _useState234 = _slicedToArray(_useState233, 2),
-    result = _useState234[0],
-    setResult = _useState234[1];
-  const _useState235 = useState(""),
-    _useState236 = _slicedToArray(_useState235, 2),
-    error = _useState236[0],
-    setError = _useState236[1];
-  const _useState237 = useState(""),
-    _useState238 = _slicedToArray(_useState237, 2),
-    groupName = _useState238[0],
-    setGroupName = _useState238[1];
-  const _useState239 = useState(false),
-    _useState240 = _slicedToArray(_useState239, 2),
-    saving = _useState240[0],
-    setSaving = _useState240[1];
+function ProducerBlockPage(_ref139) {
+  let blockId = _ref139.blockId,
+    go = _ref139.go,
+    toast = _ref139.toast;
+  const _useState243 = useState(null),
+    _useState244 = _slicedToArray(_useState243, 2),
+    result = _useState244[0],
+    setResult = _useState244[1];
+  const _useState245 = useState(""),
+    _useState246 = _slicedToArray(_useState245, 2),
+    error = _useState246[0],
+    setError = _useState246[1];
+  const _useState247 = useState(""),
+    _useState248 = _slicedToArray(_useState247, 2),
+    groupName = _useState248[0],
+    setGroupName = _useState248[1];
+  const _useState249 = useState(false),
+    _useState250 = _slicedToArray(_useState249, 2),
+    saving = _useState250[0],
+    setSaving = _useState250[1];
   const load = () => producerRequest("/api/producer/blocks/" + encodeURIComponent(blockId)).then(data => {
     setResult(data);
     setError("");
@@ -19347,6 +19550,35 @@ function ProducerBlockPage(_ref136) {
       throw e;
     }
   }
+  async function addApproval(input) {
+    try {
+      await producerRequest("/api/producer/blocks/" + encodeURIComponent(blockId) + "/approvals", {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
+      await load();
+      toast("Запрос на согласование создан");
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
+  }
+  async function decideApproval(approvalId, decision, comment) {
+    try {
+      await producerRequest("/api/producer/approvals/" + encodeURIComponent(approvalId) + "/decision", {
+        method: "PATCH",
+        body: JSON.stringify({
+          decision,
+          comment
+        })
+      });
+      await load();
+      toast(decision === "approved" ? "Согласование принято" : decision === "rejected" ? "Согласование отклонено" : "Запрос возвращён на согласование");
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
+  }
   async function deleteGroup(group, total) {
     if (!window.confirm(total ? `Удалить группу «${group.name}»? ${total} задач будут сохранены в разделе «Без группы».` : `Удалить пустую группу «${group.name}»?`)) return;
     try {
@@ -19372,8 +19604,14 @@ function ProducerBlockPage(_ref136) {
     seriesOptions = result.seriesOptions,
     groups = result.groups,
     tasks = result.tasks,
+    _result$approvals = result.approvals,
+    approvals = _result$approvals === void 0 ? [] : _result$approvals,
+    _result$warnings = result.warnings,
+    warnings = _result$warnings === void 0 ? [] : _result$warnings,
     people = result.people,
-    history = result.history;
+    history = result.history,
+    _result$permissions = result.permissions,
+    permissions = _result$permissions === void 0 ? {} : _result$permissions;
   const ungrouped = tasks.filter(task => !task.groupId);
   return React.createElement("main", {
     className: "producer-main producer-block-page"
@@ -19401,7 +19639,9 @@ function ProducerBlockPage(_ref136) {
     className: "producer-block-layout"
   }, React.createElement("div", {
     className: "producer-task-area"
-  }, React.createElement("div", {
+  }, React.createElement(ProducerWarnings, {
+    warnings: warnings
+  }), React.createElement("div", {
     className: "producer-section-head"
   }, React.createElement("div", null, React.createElement("span", {
     className: "producer-eyebrow"
@@ -19441,7 +19681,13 @@ function ProducerBlockPage(_ref136) {
     groupId: null,
     people: people,
     onCreate: addTask
-  })), React.createElement(ProducerHistory, {
+  })), React.createElement(ProducerApprovals, {
+    approvals: approvals,
+    tasks: tasks,
+    canDecide: permissions.canDecideApprovals === true,
+    onCreate: addApproval,
+    onDecision: decideApproval
+  }), React.createElement(ProducerHistory, {
     events: history
   })), React.createElement("aside", {
     className: "producer-create-panel"
@@ -19466,22 +19712,22 @@ function ProducerBlockPage(_ref136) {
     disabled: saving || !groupName.trim()
   }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C"))))));
 }
-function ProducerWorkspace(_ref137) {
-  let user = _ref137.user,
-    data = _ref137.data,
-    onExit = _ref137.onExit;
-  const _useState241 = useState(() => producerInitialScreen()),
-    _useState242 = _slicedToArray(_useState241, 2),
-    screen = _useState242[0],
-    setScreen = _useState242[1];
-  const _useState243 = useState(""),
-    _useState244 = _slicedToArray(_useState243, 2),
-    toastMessage = _useState244[0],
-    setToastMessage = _useState244[1];
-  const _useState245 = useState(0),
-    _useState246 = _slicedToArray(_useState245, 2),
-    refreshKey = _useState246[0],
-    setRefreshKey = _useState246[1];
+function ProducerWorkspace(_ref140) {
+  let user = _ref140.user,
+    data = _ref140.data,
+    onExit = _ref140.onExit;
+  const _useState251 = useState(() => producerInitialScreen()),
+    _useState252 = _slicedToArray(_useState251, 2),
+    screen = _useState252[0],
+    setScreen = _useState252[1];
+  const _useState253 = useState(""),
+    _useState254 = _slicedToArray(_useState253, 2),
+    toastMessage = _useState254[0],
+    setToastMessage = _useState254[1];
+  const _useState255 = useState(0),
+    _useState256 = _slicedToArray(_useState255, 2),
+    refreshKey = _useState256[0],
+    setRefreshKey = _useState256[1];
   useEffect(() => {
     const update = () => setScreen(producerInitialScreen());
     window.addEventListener("hashchange", update);
@@ -19527,51 +19773,51 @@ function ProducerWorkspace(_ref137) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState247 = useState(null),
-    _useState248 = _slicedToArray(_useState247, 2),
-    rawData = _useState248[0],
-    setRawData = _useState248[1];
-  const _useState249 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
-    _useState250 = _slicedToArray(_useState249, 2),
-    workspace = _useState250[0],
-    setWorkspace = _useState250[1];
-  const _useState251 = useState("today"),
-    _useState252 = _slicedToArray(_useState251, 2),
-    view = _useState252[0],
-    setView = _useState252[1];
-  const _useState253 = useState(() => parseHash()),
-    _useState254 = _slicedToArray(_useState253, 2),
-    navState = _useState254[0],
-    setNavState = _useState254[1];
-  const _useState255 = useState("ok"),
-    _useState256 = _slicedToArray(_useState255, 2),
-    syncState = _useState256[0],
-    setSyncState = _useState256[1];
-  const _useState257 = useState(""),
+  const _useState257 = useState(null),
     _useState258 = _slicedToArray(_useState257, 2),
-    syncError = _useState258[0],
-    setSyncError = _useState258[1];
-  const _useState259 = useState(false),
+    rawData = _useState258[0],
+    setRawData = _useState258[1];
+  const _useState259 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
     _useState260 = _slicedToArray(_useState259, 2),
-    dayShiftsModal = _useState260[0],
-    setDayShiftsModal = _useState260[1];
-  const _useState261 = useState(null),
+    workspace = _useState260[0],
+    setWorkspace = _useState260[1];
+  const _useState261 = useState("today"),
     _useState262 = _slicedToArray(_useState261, 2),
-    ganttDay = _useState262[0],
-    setGanttDay = _useState262[1];
-  const _useState263 = useState(false),
+    view = _useState262[0],
+    setView = _useState262[1];
+  const _useState263 = useState(() => parseHash()),
     _useState264 = _slicedToArray(_useState263, 2),
-    cmdPaletteOpen = _useState264[0],
-    setCmdPaletteOpen = _useState264[1];
-  const isMobile = useIsMobile(760);
-  const _useState265 = useState(null),
+    navState = _useState264[0],
+    setNavState = _useState264[1];
+  const _useState265 = useState("ok"),
     _useState266 = _slicedToArray(_useState265, 2),
-    user = _useState266[0],
-    setUser = _useState266[1];
-  const _useState267 = useState(null),
+    syncState = _useState266[0],
+    setSyncState = _useState266[1];
+  const _useState267 = useState(""),
     _useState268 = _slicedToArray(_useState267, 2),
-    loginError = _useState268[0],
-    setLoginError = _useState268[1];
+    syncError = _useState268[0],
+    setSyncError = _useState268[1];
+  const _useState269 = useState(false),
+    _useState270 = _slicedToArray(_useState269, 2),
+    dayShiftsModal = _useState270[0],
+    setDayShiftsModal = _useState270[1];
+  const _useState271 = useState(null),
+    _useState272 = _slicedToArray(_useState271, 2),
+    ganttDay = _useState272[0],
+    setGanttDay = _useState272[1];
+  const _useState273 = useState(false),
+    _useState274 = _slicedToArray(_useState273, 2),
+    cmdPaletteOpen = _useState274[0],
+    setCmdPaletteOpen = _useState274[1];
+  const isMobile = useIsMobile(760);
+  const _useState275 = useState(null),
+    _useState276 = _slicedToArray(_useState275, 2),
+    user = _useState276[0],
+    setUser = _useState276[1];
+  const _useState277 = useState(null),
+    _useState278 = _slicedToArray(_useState277, 2),
+    loginError = _useState278[0],
+    setLoginError = _useState278[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
@@ -20012,10 +20258,10 @@ function App() {
       const merged = {
         ...d
       };
-      for (const _ref138 of Object.entries(changes)) {
-        var _ref139 = _slicedToArray(_ref138, 2);
-        const key = _ref139[0];
-        const val = _ref139[1];
+      for (const _ref141 of Object.entries(changes)) {
+        var _ref142 = _slicedToArray(_ref141, 2);
+        const key = _ref142[0];
+        const val = _ref142[1];
         if (SOFT_DELETE_KEYS.includes(key) && Array.isArray(val)) {
           const deletedItems = (d[key] || []).filter(x => x.deleted);
           merged[key] = [...val, ...deletedItems.filter(x => !val.some(v => String(v.id) === String(x.id)))];
@@ -20548,10 +20794,10 @@ function App() {
       padding: 3,
       boxShadow: "inset 0 1px 0 rgba(255,255,255,.035)"
     }
-  }, TABS.map(_ref140 => {
-    let id = _ref140.id,
-      label = _ref140.label,
-      warn = _ref140.warn;
+  }, TABS.map(_ref143 => {
+    let id = _ref143.id,
+      label = _ref143.label,
+      warn = _ref143.warn;
     return React.createElement("button", {
       key: id,
       onClick: () => {

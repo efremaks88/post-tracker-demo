@@ -22,6 +22,7 @@ test('local demo database is seeded once and persists application edits', async 
     assert.ok((await pool.query('SELECT id FROM production_blocks')).rows.length >= 8);
     assert.ok((await pool.query('SELECT id FROM production_task_groups')).rows.length >= 5);
     assert.ok((await pool.query('SELECT id FROM production_tasks')).rows.length >= 10);
+    assert.ok((await pool.query('SELECT id FROM production_approvals')).rows.length >= 2);
     const dossiers = JSON.stringify((await pool.query('SELECT dossier FROM projects')).rows);
     assert.equal(/password|token|api[_-]?key/i.test(dossiers), false);
 
@@ -44,8 +45,10 @@ test('local demo database is seeded once and persists application edits', async 
     const producerTask = await pool.query("SELECT status FROM production_tasks WHERE id='demo-pt-north-draft'");
     assert.equal(producerTask.rows[0].status,'todo');
     await pool.query("UPDATE production_tasks SET title='Временная правка' WHERE id='demo-pt-north-draft'");
+    await pool.query("UPDATE production_approvals SET title='Временное согласование' WHERE id='demo-pa-north-script'");
     await resetProducerDemo(pool,user);
     assert.equal((await pool.query("SELECT title FROM production_tasks WHERE id='demo-pt-north-draft'")).rows[0].title,'Получить первый драфт сценария');
+    assert.equal((await pool.query("SELECT title FROM production_approvals WHERE id='demo-pa-north-script'")).rows[0].title,'Утвердить сценарий перед съёмкой');
     assert.equal((await pool.query("SELECT description FROM projects WHERE id='demo-north'")).rows[0].description,'Сохранённая локальная правка');
   } finally {
     if (pool) await pool.close();

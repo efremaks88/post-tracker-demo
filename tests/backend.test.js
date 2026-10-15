@@ -82,6 +82,8 @@ test('central permission matrix preserves current roles and denies future permis
     assert.equal(roleHasPermission(role,PERMISSIONS.PRODUCER_WRITE),true,role);
   }
   for(const role of ['editor','viewer','na','unexpected'])assert.equal(roleHasPermission(role,PERMISSIONS.PRODUCER_READ),false,role);
+  for(const role of ['admin','lead'])assert.equal(roleHasPermission(role,PERMISSIONS.APPROVAL_DECIDE),true,role);
+  for(const role of ['manager','editor','viewer','na','unexpected'])assert.equal(roleHasPermission(role,PERMISSIONS.APPROVAL_DECIDE),false,role);
 });
 test('central project and audit scopes enforce manager, editor and viewer boundaries',async()=>{
   await fixture();
@@ -107,7 +109,7 @@ test('route permissions keep user management and directories at their previous b
 });
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
-  assert.equal(first,14);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+  assert.equal(first,15);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
 });
 
 test('producer vertical slice persists blocks, groups, assignments, completion and audit',async()=>{
@@ -192,6 +194,54 @@ test('D1 edits tasks and blocks and removes groups without losing their tasks',a
   const auditBefore=(await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n;
   assert.equal((await request('/api/producer/blocks/'+blockId,'PATCH',{startDate:'2026-10-30',deadline:'2026-10-20'})).status,400);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n,auditBefore);
+});
+test('D2 approvals use decision rights, drive warnings and retain an audited decision trail',async()=>{
+  await fixture();
+  await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1'});
+  await pool.query('TRUNCATE audit_log RESTART IDENTITY');
+  const blockId=(await request('/api/producer/projects/p/blocks','POST',{
+    name:'Сдача проекта',ownerPersonId:'producer-a',deadline:'2000-01-02',status:'active',
+  })).body.id;
+  const taskId=(await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Подготовить мастер',assigneePersonId:'producer-a',deadline:'2000-01-01',
+  })).body.id;
+  const approval=(await request('/api/producer/blocks/'+blockId+'/approvals','POST',{
+    title:'Утвердить мастер',taskId,required:true,dueDate:'2000-01-02',
+  },3));
+  assert.equal(approval.status,200);assert.ok(approval.body.id);
+
+  let loaded=await request('/api/producer/blocks/'+blockId,'GET',undefined,3);
+  assert.equal(loaded.status,200);assert.equal(loaded.body.permissions.canDecideApprovals,false);
+  assert.equal(loaded.body.approvals[0].status,'pending');assert.equal(loaded.body.approvals[0].requestedByName,'Пользователь 3');
+  assert.ok(loaded.body.warnings.some(item=>item.type==='task_overdue'));
+  assert.ok(loaded.body.warnings.some(item=>item.type==='block_overdue'));
+  assert.ok(loaded.body.warnings.some(item=>item.type==='approval_overdue'));
+  assert.equal((await request('/api/producer/approvals/'+approval.body.id+'/decision','PATCH',{decision:'approved',comment:'Готово'},3)).status,403);
+
+  assert.equal((await request('/api/producer/approvals/'+approval.body.id+'/decision','PATCH',{decision:'approved',comment:'Принято руководителем'},2)).status,200);
+  loaded=await request('/api/producer/blocks/'+blockId);
+  assert.equal(loaded.body.permissions.canDecideApprovals,true);
+  assert.equal(loaded.body.approvals[0].decision,'approved');assert.equal(loaded.body.approvals[0].decidedByName,'Пользователь 2');
+  assert.equal(loaded.body.approvals[0].decisionComment,'Принято руководителем');
+  assert.equal(loaded.body.warnings.some(item=>item.type.startsWith('approval_')),false);
+
+  assert.equal((await request('/api/producer/approvals/'+approval.body.id+'/decision','PATCH',{decision:null,comment:''},1)).status,200);
+  assert.equal((await request('/api/producer/approvals/'+approval.body.id+'/decision','PATCH',{decision:'rejected',comment:'Нужны правки'},1)).status,200);
+  loaded=await request('/api/producer/blocks/'+blockId);
+  assert.ok(loaded.body.warnings.some(item=>item.type==='approval_rejected'));
+  const projectMap=(await request('/api/producer/projects/p')).body;
+  assert.equal(projectMap.blocks.find(item=>item.id===blockId).warningCount,loaded.body.warnings.length);
+  const dashboard=(await request('/api/producer/dashboard')).body;
+  assert.equal(dashboard.projects.find(item=>item.id==='p').warningCount,loaded.body.warnings.length);
+  const actions=(await pool.query("SELECT action,user_name FROM audit_log WHERE entity='productionApproval' ORDER BY id")).rows;
+  assert.deepEqual(actions.map(item=>item.action),['create','approve','restore','reject']);
+  assert.deepEqual(actions.map(item=>item.user_name),['Пользователь 3','Пользователь 2','Пользователь 1','Пользователь 1']);
+
+  const otherBlock=(await request('/api/producer/projects/other/blocks','POST',{name:'Чужой блок',ownerPersonId:'producer-a'})).body.id;
+  const otherTask=(await request('/api/producer/blocks/'+otherBlock+'/tasks','POST',{title:'Чужая задача',assigneePersonId:'producer-a'})).body.id;
+  const before=(await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity='productionApproval'")).rows[0].n;
+  assert.equal((await request('/api/producer/blocks/'+blockId+'/approvals','POST',{title:'Ошибка',taskId:otherTask,required:true})).status,400);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity='productionApproval'")).rows[0].n,before);
 });
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);

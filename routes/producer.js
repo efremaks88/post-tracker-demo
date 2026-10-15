@@ -4,6 +4,7 @@ const createProducerModel = require('../lib/models/producer');
 const { PERMISSIONS } = require('../lib/policy');
 const {
   producerBlockSchema, producerBlockUpdateSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
+  producerApprovalSchema, producerApprovalDecisionSchema,
 } = require('./schemas');
 
 module.exports = function registerProducerRoutes(app, pool, deps) {
@@ -63,7 +64,9 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
       const projectId = await Producer.blockProjectId(pool,req.params.blockId);
       if (!projectId) return res.status(404).json({error:'Блок не найден'});
       if (!(await mayView(req,projectId,pool))) return res.status(403).json({error:'Нет доступа к проекту'});
-      res.json(await Producer.block(pool,req.params.blockId));
+      const result = await Producer.block(pool,req.params.blockId);
+      result.permissions = {canDecideApprovals:await policy.can(req.session,PERMISSIONS.APPROVAL_DECIDE)};
+      res.json(result);
     } catch (error) { next(error); }
   });
 
@@ -139,6 +142,32 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
       return null;
     }
     await Producer.updateTask(req._tx,req.params.taskId,req.body);
+    return {ok:true};
+  }));
+
+  app.post('/api/producer/blocks/:blockId/approvals', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerApprovalSchema), write(['productionApproval'], async function(req,res) {
+    const projectId = await Producer.blockProjectId(req._tx,req.params.blockId);
+    if (!projectId) throw Object.assign(new Error('Блок не найден'),{status:404});
+    if (!(await mayEdit(req,projectId,req._tx))) {
+      res.status(403).json({error:'Нет прав на изменение проекта'});
+      return null;
+    }
+    const result = await Producer.createApproval(req._tx,req.params.blockId,req.body,{
+      userId:req.session.userId,userName:req.session.displayName,
+    });
+    return {ok:true,id:result.id};
+  }));
+
+  app.patch('/api/producer/approvals/:approvalId/decision', requireAuth, requirePermission(PERMISSIONS.APPROVAL_DECIDE), validate(producerApprovalDecisionSchema), write(['productionApproval'], async function(req,res) {
+    const projectId = await Producer.approvalProjectId(req._tx,req.params.approvalId);
+    if (!projectId) throw Object.assign(new Error('Согласование не найдено'),{status:404});
+    if (!(await mayEdit(req,projectId,req._tx))) {
+      res.status(403).json({error:'Нет прав на изменение проекта'});
+      return null;
+    }
+    await Producer.decideApproval(req._tx,req.params.approvalId,req.body,{
+      userId:req.session.userId,userName:req.session.displayName,
+    });
     return {ok:true};
   }));
 };

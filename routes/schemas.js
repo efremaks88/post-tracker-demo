@@ -152,6 +152,16 @@ var producerTaskUpdateSchema = z.object({
   deadline: isoDate.nullable().optional(),
   completed: z.boolean().optional(),
 }).refine(function(value) { return Object.keys(value).length > 0; }, 'No changes supplied');
+var producerApprovalSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  taskId: z.string().trim().min(1).nullable().optional(),
+  required: z.boolean().default(true),
+  dueDate: isoDate.nullable().optional(),
+});
+var producerApprovalDecisionSchema = z.object({
+  decision: z.enum(['approved','rejected']).nullable(),
+  comment: z.string().trim().max(2000).default(''),
+});
 
 bulkSchema=bulkSchema.superRefine((data,ctx)=>{
   for(const key of ['projects','series','tasks','people','roles','stages','stageGroups','achievements','personAbsences']){
@@ -184,4 +194,5 @@ module.exports = {
   loginSchema, roleSchema, stageSchema, absenceSchema, bulkSchema, validate,
   producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema,
   producerBlockUpdateSchema,
+  producerApprovalSchema, producerApprovalDecisionSchema,
 };

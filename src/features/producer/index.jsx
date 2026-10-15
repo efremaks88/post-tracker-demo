@@ -61,6 +61,7 @@ function ProducerDashboard({go,refreshKey}){
         <span className="producer-project-abbr">{project.abbr||project.name.slice(0,2)}</span>
         <span className="producer-project-copy"><small>{project.status||"в работе"}</small><strong>{project.name}</strong><em>{project.description||"Проект без описания"}</em></span>
         <span className="producer-project-stats"><b>{project.completedTasks}/{project.totalTasks}</b><small>задач готово</small></span>
+        {project.warningCount>0&&<span className="producer-warning-badge">! {project.warningCount}</span>}
         <ProducerProgress done={project.completedTasks} total={project.totalTasks}/>
         <span className="producer-card-arrow">Открыть карту →</span>
       </button>)}
@@ -88,6 +89,7 @@ function ProducerBlockNode({block,onOpen}){
     <span className="producer-node-status">{statusLabel}</span>
     <strong>{block.name}</strong>
     <small>{block.ownerName||"Ответственный не указан"}</small>
+    {block.warningCount>0&&<span className="producer-node-warning">! {block.warningCount} требует внимания</span>}
     <div><ProducerProgress done={block.completedTasks} total={block.totalTasks}/><time>{producerDate(block.deadline)}</time></div>
   </button>;
 }
@@ -204,9 +206,55 @@ function ProducerBlockSettings({block,seriesOptions,people,onSave}){
   </form></details>;
 }
 
+function ProducerWarnings({warnings}){
+  return <section className={"producer-warnings"+(warnings.length?" has-items":" clear")}>
+    <div className="producer-warnings-head"><div><span className="producer-eyebrow">КОНТРОЛЬ</span><h2>Предупреждения</h2></div><b>{warnings.length||"✓"}</b></div>
+    {warnings.length?<div className="producer-warning-list">{warnings.map(item=><article className={item.severity} key={item.id}>
+      <span>!</span><div><strong>{item.title}</strong><p>{item.message}</p></div><time>{producerDate(item.dueDate)}</time>
+    </article>)}</div>:<p>Критичных препятствий по срокам и согласованиям нет.</p>}
+  </section>;
+}
+
+function ProducerApprovalItem({approval,tasks,canDecide,onDecision}){
+  const [comment,setComment]=useState(approval.decisionComment||"");
+  const [busy,setBusy]=useState(false);
+  useEffect(()=>setComment(approval.status==="pending"?"":approval.decisionComment||""),[approval.status,approval.decisionComment]);
+  const linkedTask=tasks.find(task=>task.id===approval.taskId);
+  const status=approval.status==="pending"?"pending":approval.decision;
+  const labels={pending:"Ожидает решения",approved:"Согласовано",rejected:"Отклонено"};
+  async function decide(value){setBusy(true);try{await onDecision(approval.id,value,value?comment:"");}catch(error){}finally{setBusy(false);}}
+  return <article className={"producer-approval "+status}>
+    <div className="producer-approval-main"><div className="producer-approval-title"><span>{labels[status]||status}</span>{approval.required&&<b>обязательно</b>}<strong>{approval.title}</strong></div>
+      <p>{linkedTask?"Задача: "+linkedTask.title:"Весь блок"}{approval.dueDate?" · срок "+producerDate(approval.dueDate):""}</p>
+      <small>Запросил: {approval.requestedByName||"Система"}{approval.decidedByName?" · решение: "+approval.decidedByName:""}</small>
+      {approval.decisionComment&&approval.status!=="pending"&&<blockquote>{approval.decisionComment}</blockquote>}
+    </div>
+    {approval.status==="pending"&&canDecide&&<div className="producer-approval-decision"><input aria-label={"Комментарий к согласованию "+approval.title} value={comment} onChange={e=>setComment(e.target.value)} placeholder="Комментарий к решению"/><div><button disabled={busy} onClick={()=>decide("approved")}>Согласовать</button><button className="danger" disabled={busy} onClick={()=>decide("rejected")}>Отклонить</button></div></div>}
+    {approval.status==="pending"&&!canDecide&&<em>Решение принимает руководитель или администратор</em>}
+    {approval.status!=="pending"&&canDecide&&<button className="producer-approval-reopen" disabled={busy} onClick={()=>decide(null)}>Вернуть на согласование</button>}
+  </article>;
+}
+
+function ProducerApprovals({approvals,tasks,canDecide,onCreate,onDecision}){
+  const [open,setOpen]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [draft,setDraft]=useState({title:"",taskId:"",dueDate:"",required:true});
+  async function submit(event){event.preventDefault();setBusy(true);try{await onCreate({...draft,taskId:draft.taskId||null,dueDate:draft.dueDate||null});setDraft({title:"",taskId:"",dueDate:"",required:true});setOpen(false);}catch(error){}finally{setBusy(false);}}
+  return <section className="producer-approvals-section">
+    <div className="producer-section-head"><div><span className="producer-eyebrow">РЕШЕНИЯ</span><h2>Согласования</h2></div><b>{approvals.filter(item=>item.status==="pending").length} ожидают</b></div>
+    <div className="producer-approval-list">{approvals.length?approvals.map(item=><ProducerApprovalItem key={item.id} approval={item} tasks={tasks} canDecide={canDecide} onDecision={onDecision}/>):<p className="producer-approval-empty">Согласований в этом блоке пока нет.</p>}</div>
+    {!open?<button className="producer-approval-create-open" onClick={()=>setOpen(true)}>＋ Запросить согласование</button>:<form className="producer-approval-create" onSubmit={submit}>
+      <label>Что согласовать<input autoFocus value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} placeholder="Например, финальный сценарий" required/></label>
+      <div className="producer-form-row"><label>Связанная задача<select value={draft.taskId} onChange={e=>setDraft({...draft,taskId:e.target.value})}><option value="">Весь блок</option>{tasks.map(task=><option key={task.id} value={task.id}>{task.title}</option>)}</select></label><label>Срок решения<input type="date" value={draft.dueDate} onChange={e=>setDraft({...draft,dueDate:e.target.value})}/></label></div>
+      <label className="producer-approval-required"><input type="checkbox" checked={draft.required} onChange={e=>setDraft({...draft,required:e.target.checked})}/> Обязательное согласование влияет на предупреждения</label>
+      <div className="producer-task-editor-actions"><button type="button" onClick={()=>setOpen(false)}>Отмена</button><button className="producer-primary" disabled={busy}>{busy?"Сохраняю…":"Создать запрос"}</button></div>
+    </form>}
+  </section>;
+}
+
 function ProducerHistory({events}){
-  const actions={create:"Создано",update:"Изменено",assign:"Назначен исполнитель",move:"Перемещено",reschedule:"Изменён срок",complete:"Выполнено",restore:"Возвращено в работу",delete:"Удалено"};
-  return <details className="producer-history"><summary>История блока <b>{events.length}</b></summary><div>{events.length?events.map(event=><article key={event.id}><span>{actions[event.action]||event.action}</span><strong>{event.details?.label||"Изменение"}</strong><small>{event.userName} · {new Date(event.occurredAt).toLocaleString("ru-RU")}</small></article>):<p>История появится после первого изменения.</p>}</div></details>;
+  const actions={create:"Создано",update:"Изменено",assign:"Назначен исполнитель",move:"Перемещено",reschedule:"Изменён срок",complete:"Выполнено",restore:"Возвращено в работу",delete:"Удалено",approve:"Согласовано",reject:"Отклонено"};
+  return <details className="producer-history"><summary>История блока <b>{events.length}</b></summary><div>{events.length?events.map(event=><article key={event.id}><span>{event.entity==="productionApproval"&&event.action==="restore"?"Возвращено на согласование":actions[event.action]||event.action}</span><strong>{event.details?.label||"Изменение"}</strong><small>{event.userName} · {new Date(event.occurredAt).toLocaleString("ru-RU")}</small></article>):<p>История появится после первого изменения.</p>}</div></details>;
 }
 
 function ProducerBlockPage({blockId,go,toast}){
@@ -221,12 +269,14 @@ function ProducerBlockPage({blockId,go,toast}){
   async function updateTask(taskId,patch){try{await producerRequest("/api/producer/tasks/"+encodeURIComponent(taskId),{method:"PATCH",body:JSON.stringify(patch)});await load();toast(patch.completed===true?"Задача выполнена":patch.completed===false?"Задача возвращена в работу":"Изменения сохранены");}catch(e){setError(e.message);throw e;}}
   async function updateBlock(patch){try{await producerRequest("/api/producer/blocks/"+encodeURIComponent(blockId),{method:"PATCH",body:JSON.stringify(patch)});await load();toast("Параметры блока сохранены");}catch(e){setError(e.message);throw e;}}
   async function renameGroup(groupId,name){try{await producerRequest("/api/producer/groups/"+encodeURIComponent(groupId),{method:"PATCH",body:JSON.stringify({name})});await load();toast("Группа переименована");}catch(e){setError(e.message);throw e;}}
+  async function addApproval(input){try{await producerRequest("/api/producer/blocks/"+encodeURIComponent(blockId)+"/approvals",{method:"POST",body:JSON.stringify(input)});await load();toast("Запрос на согласование создан");}catch(e){setError(e.message);throw e;}}
+  async function decideApproval(approvalId,decision,comment){try{await producerRequest("/api/producer/approvals/"+encodeURIComponent(approvalId)+"/decision",{method:"PATCH",body:JSON.stringify({decision,comment})});await load();toast(decision==="approved"?"Согласование принято":decision==="rejected"?"Согласование отклонено":"Запрос возвращён на согласование");}catch(e){setError(e.message);throw e;}}
   async function deleteGroup(group,total){
     if(!window.confirm(total?`Удалить группу «${group.name}»? ${total} задач будут сохранены в разделе «Без группы».`:`Удалить пустую группу «${group.name}»?`))return;
     try{const answer=await producerRequest("/api/producer/groups/"+encodeURIComponent(group.id),{method:"DELETE"});await load();toast(answer.movedTasks?`Группа удалена, задач сохранено: ${answer.movedTasks}`:"Группа удалена");}catch(e){setError(e.message);}
   }
   if(!result)return <main className="producer-main">{error?<div className="producer-error">{error}</div>:<div className="producer-loading">Открываю блок…</div>}</main>;
-  const {block,project,series,seriesOptions,groups,tasks,people,history}=result;
+  const {block,project,series,seriesOptions,groups,tasks,approvals=[],warnings=[],people,history,permissions={}}=result;
   const ungrouped=tasks.filter(task=>!task.groupId);
   return <main className="producer-main producer-block-page">
     <div className="producer-breadcrumb"><button onClick={()=>go("dashboard")}>Все проекты</button><span>/</span><button onClick={()=>go("project",project.id)}>{project.name}</button><span>/</span><b>{block.name}</b></div>
@@ -236,6 +286,7 @@ function ProducerBlockPage({blockId,go,toast}){
     </section>
     {error&&<div className="producer-inline-error">{error}</div>}
     <section className="producer-block-layout"><div className="producer-task-area">
+      <ProducerWarnings warnings={warnings}/>
       <div className="producer-section-head"><div><span className="producer-eyebrow">РАБОТА</span><h2>Задачи блока</h2></div><b>{block.completedTasks} из {block.totalTasks}</b></div>
       {groups.map(group=>{const rows=tasks.filter(task=>task.groupId===group.id);return <article className="producer-task-group" key={group.id}>
         <ProducerGroupHeader group={group} done={rows.filter(t=>t.completed).length} total={rows.length} onRename={renameGroup} onDelete={deleteGroup}/>
@@ -246,6 +297,7 @@ function ProducerBlockPage({blockId,go,toast}){
         {ungrouped.length?ungrouped.map(task=><ProducerTaskRow key={task.id} task={task} people={people} groups={groups} onChange={updateTask}/>):<p>Сюда попадут задачи без группы и задачи из удалённых групп.</p>}
         <ProducerQuickTask groupId={null} people={people} onCreate={addTask}/>
       </article>
+      <ProducerApprovals approvals={approvals} tasks={tasks} canDecide={permissions.canDecideApprovals===true} onCreate={addApproval} onDecision={decideApproval}/>
       <ProducerHistory events={history}/>
     </div><aside className="producer-create-panel">
       <div className="producer-side-intro"><span className="producer-eyebrow">НАСТРОЙКА</span><h2>Блок и группы</h2><p>Задачи добавляются прямо в нужной группе слева.</p></div>
