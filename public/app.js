@@ -18451,6 +18451,81 @@ function producerDate(value) {
   const parts = String(value).slice(0, 10).split("-");
   return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : String(value);
 }
+function producerDay(value) {
+  return value ? new Date(String(value).slice(0, 10) + "T12:00:00") : null;
+}
+function producerDueState(value, complete) {
+  if (!value || complete) return "normal";
+  const due = producerDay(value);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days = Math.round((due - today) / 86400000);
+  return days < 0 ? "overdue" : days === 0 ? "today" : days <= 3 ? "soon" : "normal";
+}
+function producerRelativeDue(value) {
+  if (!value) return "срок не указан";
+  const due = producerDay(value);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days = Math.round((due - today) / 86400000);
+  if (days < 0) return `просрочено на ${Math.abs(days)} дн.`;
+  if (days === 0) return "сегодня";
+  if (days === 1) return "завтра";
+  return `через ${days} дн.`;
+}
+const PRODUCER_PROJECT_ART = {
+  "demo-north": [0, 0],
+  "demo-city": [1, 0],
+  "demo-science": [2, 0],
+  "demo-home": [3, 0],
+  "demo-stage": [0, 1],
+  "demo-factory": [1, 1],
+  "demo-expedition": [2, 1]
+};
+const PRODUCER_AVATAR_IDS = ["demo-olga", "demo-ilya", "demo-anna", "demo-denis", "demo-maria", "local-demo-producer", "demo-pavel", "demo-elena", "demo-kirill", "demo-sofia", "demo-victor", "demo-irina"];
+function ProducerAvatar(_ref124) {
+  let person = _ref124.person,
+    _ref124$size = _ref124.size,
+    size = _ref124$size === void 0 ? "normal" : _ref124$size,
+    title = _ref124.title;
+  if (!person) return React.createElement("span", {
+    className: `producer-avatar ${size} fallback`
+  }, "?");
+  const id = typeof person === "string" ? person : person.id;
+  const name = typeof person === "string" ? title || person : person.name;
+  const index = PRODUCER_AVATAR_IDS.indexOf(id);
+  const col = index >= 0 ? index % 4 : 0;
+  const row = index >= 0 ? Math.floor(index / 4) : 0;
+  const style = index >= 0 ? {
+    backgroundImage: 'url("/demo/staff-avatars-v1.png")',
+    backgroundSize: "400% 300%",
+    backgroundPosition: `${col * 100 / 3}% ${row * 50}%`
+  } : {};
+  return React.createElement("span", {
+    className: `producer-avatar ${size}${index < 0 ? " fallback" : ""}`,
+    title: name,
+    style: style
+  }, index < 0 ? String(name || "?").split(/\s+/).map(item => item[0]).join("").slice(0, 2) : "");
+}
+function ProducerProjectArt(_ref125) {
+  let project = _ref125.project;
+  const cell = PRODUCER_PROJECT_ART[project.id];
+  const style = cell ? {
+    backgroundImage: 'url("/demo/project-covers-v1.png")',
+    backgroundSize: "400% 200%",
+    backgroundPosition: `${cell[0] * 100 / 3}% ${cell[1] * 100}%`
+  } : {
+    background: project.color
+  };
+  return React.createElement("span", {
+    className: "producer-project-art",
+    style: style
+  }, React.createElement("i", {
+    style: {
+      background: project.color
+    }
+  }));
+}
 function producerInitialScreen() {
   const match = String(window.location.hash || "").match(/^#producer(?:\/(project|block)\/([^/]+))?/);
   return match && match[1] ? {
@@ -18461,17 +18536,17 @@ function producerInitialScreen() {
     id: ""
   };
 }
-function ProducerToast(_ref124) {
-  let message = _ref124.message;
+function ProducerToast(_ref126) {
+  let message = _ref126.message;
   if (!message) return null;
   return React.createElement("div", {
     className: "producer-toast",
     role: "status"
   }, "\u2713 ", message);
 }
-function ProducerProgress(_ref125) {
-  let done = _ref125.done,
-    total = _ref125.total;
+function ProducerProgress(_ref127) {
+  let done = _ref127.done,
+    total = _ref127.total;
   const percent = total ? Math.round(done * 100 / total) : 0;
   return React.createElement("div", {
     className: "producer-progress"
@@ -18481,11 +18556,11 @@ function ProducerProgress(_ref125) {
     }
   }), React.createElement("b", null, percent, "%"));
 }
-function ProducerShell(_ref126) {
-  let user = _ref126.user,
-    onExit = _ref126.onExit,
-    children = _ref126.children,
-    onHome = _ref126.onHome;
+function ProducerShell(_ref128) {
+  let user = _ref128.user,
+    onExit = _ref128.onExit,
+    children = _ref128.children,
+    onHome = _ref128.onHome;
   return React.createElement("div", {
     className: "producer-shell"
   }, React.createElement("header", {
@@ -18505,9 +18580,9 @@ function ProducerShell(_ref126) {
     className: "producer-user"
   }, React.createElement("span", null, user.display_name), React.createElement("b", null, user.role))), children);
 }
-function ProducerDashboard(_ref127) {
-  let go = _ref127.go,
-    refreshKey = _ref127.refreshKey;
+function ProducerDashboard(_ref129) {
+  let go = _ref129.go,
+    refreshKey = _ref129.refreshKey;
   const _useState197 = useState(null),
     _useState198 = _slicedToArray(_useState197, 2),
     result = _useState198[0],
@@ -18516,6 +18591,14 @@ function ProducerDashboard(_ref127) {
     _useState200 = _slicedToArray(_useState199, 2),
     error = _useState200[0],
     setError = _useState200[1];
+  const _useState201 = useState(""),
+    _useState202 = _slicedToArray(_useState201, 2),
+    expandedProject = _useState202[0],
+    setExpandedProject = _useState202[1];
+  const _useState203 = useState(false),
+    _useState204 = _slicedToArray(_useState203, 2),
+    showAllAttention = _useState204[0],
+    setShowAllAttention = _useState204[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -18535,126 +18618,182 @@ function ProducerDashboard(_ref127) {
     className: "producer-loading"
   }, "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044E \u043F\u0440\u043E\u0434\u044E\u0441\u0435\u0440\u0441\u043A\u0443\u044E\u2026"));
   const todayTasks = result.myTasks || [];
+  const attention = result.attention || [];
+  const statusLabels = {
+    "в работе": "В работе",
+    "постпродакшн": "В посте",
+    "съёмка": "На съёмке",
+    "подготовка": "В подготовке"
+  };
+  const statuses = result.projects.reduce((rows, project) => {
+    const key = statusLabels[project.status] || project.status || "Без статуса";
+    rows[key] = (rows[key] || 0) + 1;
+    return rows;
+  }, {});
   return React.createElement("main", {
     className: "producer-main"
   }, React.createElement("section", {
     className: "producer-welcome"
   }, React.createElement("div", null, React.createElement("span", {
     className: "producer-eyebrow"
-  }, "\u0420\u0410\u0411\u041E\u0427\u0418\u0419 \u0421\u0422\u041E\u041B"), React.createElement("h1", null, "\u041F\u0440\u043E\u0435\u043A\u0442\u044B \u0432 \u0440\u0430\u0431\u043E\u0442\u0435"), React.createElement("p", null, "\u0413\u043B\u0430\u0432\u043D\u043E\u0435 \u043F\u043E \u043F\u0440\u043E\u0435\u043A\u0442\u0430\u043C, \u0437\u0430\u0434\u0430\u0447\u0430\u043C \u0438 \u0441\u0440\u043E\u043A\u0430\u043C \u043D\u0430 \u043E\u0434\u043D\u043E\u043C \u044D\u043A\u0440\u0430\u043D\u0435.")), React.createElement("div", {
+  }, "\u041B\u0418\u0427\u041D\u042B\u0419 \u0420\u0410\u0411\u041E\u0427\u0418\u0419 \u0421\u0422\u041E\u041B"), React.createElement("h1", null, "\u0427\u0442\u043E \u0432\u0430\u0436\u043D\u043E \u0441\u0435\u0433\u043E\u0434\u043D\u044F"), React.createElement("p", null, "\u0412\u0430\u0448\u0438 \u0437\u0430\u0434\u0430\u0447\u0438, \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0438 \u0441\u0440\u043E\u043A\u0438 \u2014 \u0431\u0435\u0437 \u043B\u0438\u0448\u043D\u0435\u0433\u043E \u0448\u0443\u043C\u0430.")), React.createElement("div", {
     className: "producer-today"
   }, React.createElement("small", null, "\u0421\u0435\u0433\u043E\u0434\u043D\u044F"), React.createElement("strong", null, new Date().toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "long"
   })))), React.createElement("section", {
-    className: "producer-project-grid"
-  }, result.projects.map(project => React.createElement("button", {
-    className: "producer-project-card",
-    key: project.id,
-    onClick: () => go("project", project.id),
-    style: {
-      "--project-color": project.color
-    }
-  }, React.createElement("span", {
-    className: "producer-project-abbr"
-  }, project.abbr || project.name.slice(0, 2)), React.createElement("span", {
-    className: "producer-project-copy"
-  }, React.createElement("small", null, project.status || "в работе"), React.createElement("strong", null, project.name), React.createElement("em", null, project.description || "Проект без описания")), React.createElement("span", {
-    className: "producer-project-stats"
-  }, React.createElement("b", null, project.completedTasks, "/", project.totalTasks), React.createElement("small", null, "\u0437\u0430\u0434\u0430\u0447 \u0433\u043E\u0442\u043E\u0432\u043E")), project.warningCount > 0 && React.createElement("span", {
-    className: "producer-warning-badge"
-  }, "! ", project.warningCount), React.createElement(ProducerProgress, {
-    done: project.completedTasks,
-    total: project.totalTasks
-  }), React.createElement("span", {
-    className: "producer-card-arrow"
-  }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u0440\u0442\u0443 \u2192")))), React.createElement("section", {
-    className: "producer-dashboard-grid"
-  }, React.createElement(ProducerDashboardList, {
-    title: "\u041C\u043E\u0438 \u0437\u0430\u0434\u0430\u0447\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F",
-    icon: "\u2713",
-    empty: "\u041D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0437\u0430\u0434\u0430\u0447 \u043D\u0435\u0442",
-    rows: todayTasks,
-    onOpen: item => go("block", item.blockId)
-  }), React.createElement(ProducerDashboardList, {
-    title: "\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u0440\u043E\u043A\u0438",
-    icon: "\u25F7",
-    empty: "\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0445 \u0441\u0440\u043E\u043A\u043E\u0432 \u043D\u0435\u0442",
-    rows: result.deadlines,
-    onOpen: item => go("block", item.blockId)
-  }), React.createElement(ProducerDashboardList, {
-    title: "\u0422\u0440\u0435\u0431\u0443\u0435\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F",
-    icon: "!",
-    danger: true,
-    empty: "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447 \u043D\u0435\u0442",
-    rows: result.attention,
-    onOpen: item => go("block", item.blockId)
-  })));
-}
-function ProducerDashboardList(_ref128) {
-  let title = _ref128.title,
-    icon = _ref128.icon,
-    empty = _ref128.empty,
-    rows = _ref128.rows,
-    onOpen = _ref128.onOpen,
-    danger = _ref128.danger;
-  return React.createElement("article", {
-    className: "producer-list-card" + (danger ? " danger" : "")
-  }, React.createElement("h2", null, React.createElement("span", null, icon), title, React.createElement("b", null, rows.length)), React.createElement("div", {
-    className: "producer-list-body"
-  }, rows.length ? rows.slice(0, 6).map(item => React.createElement("button", {
+    className: "producer-overview-strip"
+  }, React.createElement("div", null, React.createElement("strong", null, result.projects.length), React.createElement("span", null, "\u043F\u0440\u043E\u0435\u043A\u0442\u043E\u0432 \u0432 \u0440\u0430\u0431\u043E\u0442\u0435")), React.createElement("div", null, React.createElement("strong", null, todayTasks.length), React.createElement("span", null, "\u0432\u0430\u0448\u0438\u0445 \u0437\u0430\u0434\u0430\u0447 \u0441\u0435\u0433\u043E\u0434\u043D\u044F")), React.createElement("div", {
+    className: attention.some(item => item.severity === "high") ? "hot" : ""
+  }, React.createElement("strong", null, attention.length), React.createElement("span", null, "\u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0439 \u0442\u0440\u0435\u0431\u0443\u044E\u0442 \u0440\u0435\u0448\u0435\u043D\u0438\u044F")), React.createElement("div", {
+    className: "producer-stage-summary"
+  }, Object.entries(statuses).map(_ref130 => {
+    let _ref131 = _slicedToArray(_ref130, 2),
+      label = _ref131[0],
+      count = _ref131[1];
+    return React.createElement("span", {
+      key: label
+    }, React.createElement("b", null, count), " ", label.toLowerCase());
+  }))), React.createElement("section", {
+    className: "producer-daily-grid"
+  }, React.createElement("article", {
+    className: "producer-my-day"
+  }, React.createElement("header", null, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u041C\u041E\u0419 \u0414\u0415\u041D\u042C"), React.createElement("h2", null, "\u0417\u0430\u0434\u0430\u0447\u0438 \u043D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F")), React.createElement("b", null, todayTasks.length)), React.createElement("div", {
+    className: "producer-my-day-list"
+  }, todayTasks.length ? todayTasks.map(item => React.createElement("button", {
     key: item.id,
-    onClick: () => onOpen(item)
-  }, React.createElement("i", {
+    onClick: () => go("block", item.blockId)
+  }, React.createElement("span", {
+    className: "producer-paper-check"
+  }), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName, " \xB7 ", item.blockName)), React.createElement("i", {
     style: {
       background: item.projectColor
     }
-  }), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName, " \xB7 ", item.blockName)), React.createElement("time", null, producerDate(item.deadline)))) : React.createElement("p", null, empty)));
+  }))) : React.createElement("p", null, "\u041D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0437\u0430\u0434\u0430\u0447 \u043D\u0435\u0442. \u041C\u043E\u0436\u043D\u043E \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u0440\u043E\u043A\u0438."))), React.createElement("article", {
+    className: "producer-attention-board"
+  }, React.createElement("header", null, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u041D\u0423\u0416\u041D\u041E \u0420\u0410\u0417\u041E\u0411\u0420\u0410\u0422\u042C\u0421\u042F"), React.createElement("h2", null, "\u0427\u0442\u043E \u043C\u0435\u0448\u0430\u0435\u0442 \u0440\u0430\u0431\u043E\u0442\u0435")), React.createElement("b", null, attention.length)), React.createElement("div", null, attention.length ? (showAllAttention ? attention : attention.slice(0, 6)).map(item => React.createElement("button", {
+    className: item.severity,
+    key: item.id,
+    onClick: () => go("block", item.blockId)
+  }, React.createElement("span", {
+    className: "producer-attention-sign"
+  }, "!"), React.createElement("span", null, React.createElement("em", null, item.reason), React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName, " \xB7 ", item.detail || item.blockName)), React.createElement("time", null, producerRelativeDue(item.deadline)))) : React.createElement("p", null, "\u0421\u0440\u043E\u0447\u043D\u044B\u0445 \u043F\u0440\u0435\u043F\u044F\u0442\u0441\u0442\u0432\u0438\u0439 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0442."), attention.length > 6 && React.createElement("button", {
+    className: "producer-attention-more",
+    onClick: () => setShowAllAttention(value => !value)
+  }, showAllAttention ? "Скрыть менее срочные" : "Показать ещё " + (attention.length - 6))))), React.createElement("section", {
+    className: "producer-deadline-section"
+  }, React.createElement("header", null, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u0411\u041B\u0418\u0416\u0410\u0419\u0428\u0418\u0415 14 \u0414\u041D\u0415\u0419"), React.createElement("h2", null, "\u041B\u0438\u043D\u0438\u044F \u0441\u0440\u043E\u043A\u043E\u0432")), React.createElement("p", null, "\u0421\u0440\u043E\u043A\u0438 \u0438\u0434\u0443\u0442 \u0441\u043B\u0435\u0432\u0430 \u043D\u0430\u043F\u0440\u0430\u0432\u043E; \u0446\u0432\u0435\u0442 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0441\u0440\u043E\u0447\u043D\u043E\u0441\u0442\u044C.")), React.createElement("div", {
+    className: "producer-deadline-rail"
+  }, result.deadlines.length ? result.deadlines.map(item => React.createElement("button", {
+    className: producerDueState(item.deadline, false),
+    key: item.id,
+    onClick: () => go("block", item.blockId),
+    style: {
+      "--project-color": item.projectColor
+    }
+  }, React.createElement("time", null, producerDate(item.deadline)), React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName))) : React.createElement("p", null, "\u0412 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u0432\u0435 \u043D\u0435\u0434\u0435\u043B\u0438 \u0441\u0440\u043E\u043A\u043E\u0432 \u043D\u0435\u0442."))), React.createElement("section", {
+    className: "producer-project-shelf-section"
+  }, React.createElement("header", null, React.createElement("div", null, React.createElement("span", {
+    className: "producer-eyebrow"
+  }, "\u041F\u0420\u041E\u0415\u041A\u0422\u042B"), React.createElement("h2", null, "\u041F\u0440\u043E\u0435\u043A\u0442\u043D\u0430\u044F \u043F\u043E\u043B\u043A\u0430")), React.createElement("p", null, "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0440\u0430\u0437 \u0434\u043B\u044F \u0434\u0435\u0442\u0430\u043B\u0435\u0439, \u0434\u0432\u0430 \u0440\u0430\u0437\u0430 \u2014 \u0447\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u0440\u0442\u0443.")), React.createElement("div", {
+    className: "producer-project-shelf"
+  }, result.projects.map(project => {
+    const expanded = expandedProject === project.id;
+    return React.createElement("article", {
+      className: "producer-project-tile" + (expanded ? " expanded" : ""),
+      key: project.id,
+      style: {
+        "--project-color": project.color
+      }
+    }, React.createElement("button", {
+      className: "producer-project-tile-main",
+      onClick: () => setExpandedProject(expanded ? "" : project.id),
+      onDoubleClick: () => go("project", project.id)
+    }, React.createElement(ProducerProjectArt, {
+      project: project
+    }), React.createElement("span", {
+      className: "producer-project-tile-copy"
+    }, React.createElement("small", null, statusLabels[project.status] || project.status || "В работе"), React.createElement("strong", null, project.name), React.createElement("em", null, project.description || "Проект без описания")), project.warningCount > 0 && React.createElement("span", {
+      className: "producer-warning-badge"
+    }, "! ", project.warningCount)), React.createElement("div", {
+      className: "producer-project-tile-foot"
+    }, React.createElement(ProducerProgress, {
+      done: project.completedTasks,
+      total: project.totalTasks
+    }), React.createElement("span", null, project.completedTasks, "/", project.totalTasks, " \u0437\u0430\u0434\u0430\u0447")), expanded && React.createElement("div", {
+      className: "producer-project-tile-detail"
+    }, React.createElement("div", {
+      className: "producer-avatar-stack"
+    }, (project.team || []).map(person => React.createElement(ProducerAvatar, {
+      key: person.id,
+      person: person,
+      size: "small"
+    }))), React.createElement("span", null, "\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0439 \u0441\u0440\u043E\u043A: ", React.createElement("b", null, producerDate(project.nextDeadline))), React.createElement("button", {
+      onClick: () => go("project", project.id)
+    }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u0440\u0442\u0443 \u2192")));
+  }))));
 }
-function ProducerBlockNode(_ref129) {
-  let block = _ref129.block,
-    onOpen = _ref129.onOpen;
+function ProducerBlockNode(_ref132) {
+  let block = _ref132.block,
+    onOpen = _ref132.onOpen;
   const statusLabel = {
     done: "Готово",
     active: "В работе",
     planned: "Запланировано",
     paused: "Пауза"
   }[block.status] || block.status;
+  const dueState = producerDueState(block.deadline, block.status === "done");
   return React.createElement("button", {
-    className: "producer-map-node " + block.status,
+    className: `producer-map-node ${block.status} due-${dueState}`,
     onClick: () => onOpen(block.id)
   }, React.createElement("span", {
     className: "producer-node-status"
-  }, statusLabel), React.createElement("strong", null, block.name), React.createElement("small", null, block.ownerName || "Ответственный не указан"), block.warningCount > 0 && React.createElement("span", {
+  }, statusLabel), React.createElement("strong", null, block.name), React.createElement("small", {
+    className: "producer-node-owner"
+  }, React.createElement(ProducerAvatar, {
+    person: {
+      id: block.ownerPersonId,
+      name: block.ownerName
+    },
+    size: "tiny"
+  }), block.ownerName || "Ответственный не указан"), block.warningCount > 0 && React.createElement("span", {
     className: "producer-node-warning"
   }, "! ", block.warningCount, " \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F"), React.createElement("div", null, React.createElement(ProducerProgress, {
     done: block.completedTasks,
     total: block.totalTasks
-  }), React.createElement("time", null, producerDate(block.deadline))));
+  }), React.createElement("time", {
+    className: dueState
+  }, producerDate(block.deadline))));
 }
-function ProducerProjectMap(_ref130) {
+function ProducerProjectMap(_ref133) {
   var _people$;
-  let projectId = _ref130.projectId,
-    people = _ref130.people,
-    go = _ref130.go,
-    toast = _ref130.toast;
-  const _useState201 = useState(null),
-    _useState202 = _slicedToArray(_useState201, 2),
-    result = _useState202[0],
-    setResult = _useState202[1];
-  const _useState203 = useState(""),
-    _useState204 = _slicedToArray(_useState203, 2),
-    error = _useState204[0],
-    setError = _useState204[1];
-  const _useState205 = useState(false),
+  let projectId = _ref133.projectId,
+    people = _ref133.people,
+    go = _ref133.go,
+    toast = _ref133.toast;
+  const _useState205 = useState(null),
     _useState206 = _slicedToArray(_useState205, 2),
-    showCreate = _useState206[0],
-    setShowCreate = _useState206[1];
-  const _useState207 = useState(false),
+    result = _useState206[0],
+    setResult = _useState206[1];
+  const _useState207 = useState(""),
     _useState208 = _slicedToArray(_useState207, 2),
-    saving = _useState208[0],
-    setSaving = _useState208[1];
-  const _useState209 = useState({
+    error = _useState208[0],
+    setError = _useState208[1];
+  const _useState209 = useState(false),
+    _useState210 = _slicedToArray(_useState209, 2),
+    showCreate = _useState210[0],
+    setShowCreate = _useState210[1];
+  const _useState211 = useState(false),
+    _useState212 = _slicedToArray(_useState211, 2),
+    saving = _useState212[0],
+    setSaving = _useState212[1];
+  const _useState213 = useState({
       name: "",
       description: "",
       seriesId: "",
@@ -18663,9 +18802,9 @@ function ProducerProjectMap(_ref130) {
       deadline: "",
       status: "planned"
     }),
-    _useState210 = _slicedToArray(_useState209, 2),
-    form = _useState210[0],
-    setForm = _useState210[1];
+    _useState214 = _slicedToArray(_useState213, 2),
+    form = _useState214[0],
+    setForm = _useState214[1];
   const load = () => producerRequest("/api/producer/projects/" + encodeURIComponent(projectId)).then(setResult).catch(e => setError(e.message));
   useEffect(() => {
     load();
@@ -18731,7 +18870,7 @@ function ProducerProjectMap(_ref130) {
     className: "producer-map-section"
   }, React.createElement("div", {
     className: "producer-map-title"
-  }, React.createElement("div", null, React.createElement("small", null, "\u041E\u0411\u0429\u0410\u042F \u041B\u0418\u041D\u0418\u042F"), React.createElement("h2", null, "\u041F\u0440\u043E\u0435\u043A\u0442 \u0446\u0435\u043B\u0438\u043A\u043E\u043C")), React.createElement("span", null, common.length, " \u0431\u043B\u043E\u043A\u043E\u0432")), React.createElement("div", {
+  }, React.createElement("div", null, React.createElement("small", null, "\u041E\u0411\u0429\u0410\u042F \u041B\u0418\u041D\u0418\u042F"), React.createElement("h2", null, "\u041E\u0431\u0449\u0438\u0435 \u044D\u0442\u0430\u043F\u044B")), React.createElement("span", null, common.length, " \u0431\u043B\u043E\u043A\u043E\u0432")), React.createElement("div", {
     className: "producer-map-track"
   }, common.length ? common.map((block, index) => React.createElement(React.Fragment, {
     key: block.id
@@ -18861,29 +19000,29 @@ function ProducerProjectMap(_ref130) {
     disabled: saving
   }, saving ? "Сохраняю…" : "Создать блок")))));
 }
-function ProducerTaskRow(_ref131) {
-  let task = _ref131.task,
-    people = _ref131.people,
-    groups = _ref131.groups,
-    onChange = _ref131.onChange;
-  const _useState211 = useState(false),
-    _useState212 = _slicedToArray(_useState211, 2),
-    busy = _useState212[0],
-    setBusy = _useState212[1];
-  const _useState213 = useState(false),
-    _useState214 = _slicedToArray(_useState213, 2),
-    editing = _useState214[0],
-    setEditing = _useState214[1];
-  const _useState215 = useState({
+function ProducerTaskRow(_ref134) {
+  let task = _ref134.task,
+    people = _ref134.people,
+    groups = _ref134.groups,
+    onChange = _ref134.onChange;
+  const _useState215 = useState(false),
+    _useState216 = _slicedToArray(_useState215, 2),
+    busy = _useState216[0],
+    setBusy = _useState216[1];
+  const _useState217 = useState(false),
+    _useState218 = _slicedToArray(_useState217, 2),
+    editing = _useState218[0],
+    setEditing = _useState218[1];
+  const _useState219 = useState({
       title: task.title,
       groupId: task.groupId || "",
       assigneePersonId: task.assigneePersonId || "",
       responsiblePersonId: task.responsiblePersonId || "",
       deadline: task.deadline || ""
     }),
-    _useState216 = _slicedToArray(_useState215, 2),
-    draft = _useState216[0],
-    setDraft = _useState216[1];
+    _useState220 = _slicedToArray(_useState219, 2),
+    draft = _useState220[0],
+    setDraft = _useState220[1];
   useEffect(() => {
     if (!editing) setDraft({
       title: task.title,
@@ -18916,8 +19055,10 @@ function ProducerTaskRow(_ref131) {
       setBusy(false);
     }
   }
+  const dueState = producerDueState(task.deadline, task.completed);
   return React.createElement("div", {
-    className: "producer-task-item" + (task.completed ? " complete" : "") + (busy ? " busy" : "")
+    id: "producer-task-" + task.id,
+    className: "producer-task-item due-" + dueState + (task.completed ? " complete" : "") + (busy ? " busy" : "")
   }, React.createElement("div", {
     className: "producer-task-row"
   }, React.createElement("label", {
@@ -18933,7 +19074,15 @@ function ProducerTaskRow(_ref131) {
   }), React.createElement("span", null, "\u2713")), React.createElement("button", {
     className: "producer-task-copy",
     onClick: () => setEditing(value => !value)
-  }, React.createElement("strong", null, task.title), React.createElement("small", null, task.responsibleName ? "Ответственный: " + task.responsibleName : "Без отдельного ответственного")), React.createElement("select", {
+  }, React.createElement("strong", null, task.title), React.createElement("small", null, task.responsibleName ? "Ответственный: " + task.responsibleName : "Без отдельного ответственного")), React.createElement("div", {
+    className: "producer-task-assignee"
+  }, React.createElement(ProducerAvatar, {
+    person: {
+      id: task.assigneePersonId,
+      name: task.assigneeName
+    },
+    size: "tiny"
+  }), React.createElement("select", {
     "aria-label": "Исполнитель задачи " + task.title,
     value: task.assigneePersonId || "",
     onChange: e => update({
@@ -18942,7 +19091,10 @@ function ProducerTaskRow(_ref131) {
   }, people.map(person => React.createElement("option", {
     key: person.id,
     value: person.id
-  }, person.name))), React.createElement("time", null, producerDate(task.deadline)), React.createElement("button", {
+  }, person.name)))), React.createElement("time", {
+    className: dueState,
+    title: producerRelativeDue(task.deadline)
+  }, producerDate(task.deadline)), React.createElement("button", {
     className: "producer-edit-task",
     onClick: () => setEditing(value => !value),
     "aria-label": "Изменить задачу " + task.title
@@ -19006,27 +19158,27 @@ function ProducerTaskRow(_ref131) {
     disabled: busy
   }, "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"))));
 }
-function ProducerQuickTask(_ref132) {
+function ProducerQuickTask(_ref135) {
   var _people$2;
-  let groupId = _ref132.groupId,
-    people = _ref132.people,
-    onCreate = _ref132.onCreate;
-  const _useState217 = useState(false),
-    _useState218 = _slicedToArray(_useState217, 2),
-    open = _useState218[0],
-    setOpen = _useState218[1];
-  const _useState219 = useState(false),
-    _useState220 = _slicedToArray(_useState219, 2),
-    busy = _useState220[0],
-    setBusy = _useState220[1];
-  const _useState221 = useState(""),
+  let groupId = _ref135.groupId,
+    people = _ref135.people,
+    onCreate = _ref135.onCreate;
+  const _useState221 = useState(false),
     _useState222 = _slicedToArray(_useState221, 2),
-    title = _useState222[0],
-    setTitle = _useState222[1];
-  const _useState223 = useState(((_people$2 = people[0]) === null || _people$2 === void 0 ? void 0 : _people$2.id) || ""),
+    open = _useState222[0],
+    setOpen = _useState222[1];
+  const _useState223 = useState(false),
     _useState224 = _slicedToArray(_useState223, 2),
-    assignee = _useState224[0],
-    setAssignee = _useState224[1];
+    busy = _useState224[0],
+    setBusy = _useState224[1];
+  const _useState225 = useState(""),
+    _useState226 = _slicedToArray(_useState225, 2),
+    title = _useState226[0],
+    setTitle = _useState226[1];
+  const _useState227 = useState(((_people$2 = people[0]) === null || _people$2 === void 0 ? void 0 : _people$2.id) || ""),
+    _useState228 = _slicedToArray(_useState227, 2),
+    assignee = _useState228[0],
+    setAssignee = _useState228[1];
   async function submit(event) {
     event.preventDefault();
     if (!title.trim() || !assignee) return;
@@ -19078,20 +19230,20 @@ function ProducerQuickTask(_ref132) {
     }
   }, "\u041E\u0442\u043C\u0435\u043D\u0430"));
 }
-function ProducerGroupHeader(_ref133) {
-  let group = _ref133.group,
-    done = _ref133.done,
-    total = _ref133.total,
-    onRename = _ref133.onRename,
-    onDelete = _ref133.onDelete;
-  const _useState225 = useState(false),
-    _useState226 = _slicedToArray(_useState225, 2),
-    renaming = _useState226[0],
-    setRenaming = _useState226[1];
-  const _useState227 = useState(group.name),
-    _useState228 = _slicedToArray(_useState227, 2),
-    name = _useState228[0],
-    setName = _useState228[1];
+function ProducerGroupHeader(_ref136) {
+  let group = _ref136.group,
+    done = _ref136.done,
+    total = _ref136.total,
+    onRename = _ref136.onRename,
+    onDelete = _ref136.onDelete;
+  const _useState229 = useState(false),
+    _useState230 = _slicedToArray(_useState229, 2),
+    renaming = _useState230[0],
+    setRenaming = _useState230[1];
+  const _useState231 = useState(group.name),
+    _useState232 = _slicedToArray(_useState231, 2),
+    name = _useState232[0],
+    setName = _useState232[1];
   async function save(event) {
     event.preventDefault();
     if (!name.trim()) return;
@@ -19122,12 +19274,12 @@ function ProducerGroupHeader(_ref133) {
     onClick: () => onDelete(group, total)
   }, "\u0423\u0434\u0430\u043B\u0438\u0442\u044C"))));
 }
-function ProducerBlockSettings(_ref134) {
-  let block = _ref134.block,
-    seriesOptions = _ref134.seriesOptions,
-    people = _ref134.people,
-    onSave = _ref134.onSave;
-  const _useState229 = useState({
+function ProducerBlockSettings(_ref137) {
+  let block = _ref137.block,
+    seriesOptions = _ref137.seriesOptions,
+    people = _ref137.people,
+    onSave = _ref137.onSave;
+  const _useState233 = useState({
       name: block.name,
       description: block.description || "",
       seriesId: block.seriesId || "",
@@ -19136,13 +19288,13 @@ function ProducerBlockSettings(_ref134) {
       deadline: block.deadline || "",
       status: block.status
     }),
-    _useState230 = _slicedToArray(_useState229, 2),
-    draft = _useState230[0],
-    setDraft = _useState230[1];
-  const _useState231 = useState(false),
-    _useState232 = _slicedToArray(_useState231, 2),
-    busy = _useState232[0],
-    setBusy = _useState232[1];
+    _useState234 = _slicedToArray(_useState233, 2),
+    draft = _useState234[0],
+    setDraft = _useState234[1];
+  const _useState235 = useState(false),
+    _useState236 = _slicedToArray(_useState235, 2),
+    busy = _useState236[0],
+    setBusy = _useState236[1];
   useEffect(() => setDraft({
     name: block.name,
     description: block.description || "",
@@ -19239,8 +19391,9 @@ function ProducerBlockSettings(_ref134) {
     disabled: busy
   }, busy ? "Сохраняю…" : "Сохранить параметры")));
 }
-function ProducerWarnings(_ref135) {
-  let warnings = _ref135.warnings;
+function ProducerWarnings(_ref138) {
+  let warnings = _ref138.warnings,
+    onFocus = _ref138.onFocus;
   return React.createElement("section", {
     className: "producer-warnings" + (warnings.length ? " has-items" : " clear")
   }, React.createElement("div", {
@@ -19249,24 +19402,25 @@ function ProducerWarnings(_ref135) {
     className: "producer-eyebrow"
   }, "\u041A\u041E\u041D\u0422\u0420\u041E\u041B\u042C"), React.createElement("h2", null, "\u041F\u0440\u0435\u0434\u0443\u043F\u0440\u0435\u0436\u0434\u0435\u043D\u0438\u044F")), React.createElement("b", null, warnings.length || "✓")), warnings.length ? React.createElement("div", {
     className: "producer-warning-list"
-  }, warnings.map(item => React.createElement("article", {
+  }, warnings.map(item => React.createElement("button", {
     className: item.severity,
-    key: item.id
-  }, React.createElement("span", null, "!"), React.createElement("div", null, React.createElement("strong", null, item.title), React.createElement("p", null, item.message)), React.createElement("time", null, producerDate(item.dueDate))))) : React.createElement("p", null, "\u041A\u0440\u0438\u0442\u0438\u0447\u043D\u044B\u0445 \u043F\u0440\u0435\u043F\u044F\u0442\u0441\u0442\u0432\u0438\u0439 \u043F\u043E \u0441\u0440\u043E\u043A\u0430\u043C \u0438 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u044F\u043C \u043D\u0435\u0442."));
+    key: item.id,
+    onClick: () => onFocus(item)
+  }, React.createElement("span", null, "!"), React.createElement("div", null, React.createElement("strong", null, item.title), React.createElement("p", null, item.message), React.createElement("small", null, "\u041D\u0430\u0436\u043C\u0438\u0442\u0435, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u043C\u0435\u0441\u0442\u043E \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u044B \u2192")), React.createElement("time", null, producerDate(item.dueDate))))) : React.createElement("p", null, "\u041A\u0440\u0438\u0442\u0438\u0447\u043D\u044B\u0445 \u043F\u0440\u0435\u043F\u044F\u0442\u0441\u0442\u0432\u0438\u0439 \u043F\u043E \u0441\u0440\u043E\u043A\u0430\u043C \u0438 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u044F\u043C \u043D\u0435\u0442."));
 }
-function ProducerApprovalItem(_ref136) {
-  let approval = _ref136.approval,
-    tasks = _ref136.tasks,
-    canDecide = _ref136.canDecide,
-    onDecision = _ref136.onDecision;
-  const _useState233 = useState(approval.decisionComment || ""),
-    _useState234 = _slicedToArray(_useState233, 2),
-    comment = _useState234[0],
-    setComment = _useState234[1];
-  const _useState235 = useState(false),
-    _useState236 = _slicedToArray(_useState235, 2),
-    busy = _useState236[0],
-    setBusy = _useState236[1];
+function ProducerApprovalItem(_ref139) {
+  let approval = _ref139.approval,
+    tasks = _ref139.tasks,
+    canDecide = _ref139.canDecide,
+    onDecision = _ref139.onDecision;
+  const _useState237 = useState(approval.decisionComment || ""),
+    _useState238 = _slicedToArray(_useState237, 2),
+    comment = _useState238[0],
+    setComment = _useState238[1];
+  const _useState239 = useState(false),
+    _useState240 = _slicedToArray(_useState239, 2),
+    busy = _useState240[0],
+    setBusy = _useState240[1];
   useEffect(() => setComment(approval.status === "pending" ? "" : approval.decisionComment || ""), [approval.status, approval.decisionComment]);
   const linkedTask = tasks.find(task => task.id === approval.taskId);
   const status = approval.status === "pending" ? "pending" : approval.decision;
@@ -19284,6 +19438,7 @@ function ProducerApprovalItem(_ref136) {
     }
   }
   return React.createElement("article", {
+    id: "producer-approval-" + approval.id,
     className: "producer-approval " + status
   }, React.createElement("div", {
     className: "producer-approval-main"
@@ -19309,29 +19464,29 @@ function ProducerApprovalItem(_ref136) {
     onClick: () => decide(null)
   }, "\u0412\u0435\u0440\u043D\u0443\u0442\u044C \u043D\u0430 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0435"));
 }
-function ProducerApprovals(_ref137) {
-  let approvals = _ref137.approvals,
-    tasks = _ref137.tasks,
-    canDecide = _ref137.canDecide,
-    onCreate = _ref137.onCreate,
-    onDecision = _ref137.onDecision;
-  const _useState237 = useState(false),
-    _useState238 = _slicedToArray(_useState237, 2),
-    open = _useState238[0],
-    setOpen = _useState238[1];
-  const _useState239 = useState(false),
-    _useState240 = _slicedToArray(_useState239, 2),
-    busy = _useState240[0],
-    setBusy = _useState240[1];
-  const _useState241 = useState({
+function ProducerApprovals(_ref140) {
+  let approvals = _ref140.approvals,
+    tasks = _ref140.tasks,
+    canDecide = _ref140.canDecide,
+    onCreate = _ref140.onCreate,
+    onDecision = _ref140.onDecision;
+  const _useState241 = useState(false),
+    _useState242 = _slicedToArray(_useState241, 2),
+    open = _useState242[0],
+    setOpen = _useState242[1];
+  const _useState243 = useState(false),
+    _useState244 = _slicedToArray(_useState243, 2),
+    busy = _useState244[0],
+    setBusy = _useState244[1];
+  const _useState245 = useState({
       title: "",
       taskId: "",
       dueDate: "",
       required: true
     }),
-    _useState242 = _slicedToArray(_useState241, 2),
-    draft = _useState242[0],
-    setDraft = _useState242[1];
+    _useState246 = _slicedToArray(_useState245, 2),
+    draft = _useState246[0],
+    setDraft = _useState246[1];
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
@@ -19422,8 +19577,8 @@ function ProducerApprovals(_ref137) {
     disabled: busy
   }, busy ? "Сохраняю…" : "Создать запрос"))));
 }
-function ProducerHistory(_ref138) {
-  let events = _ref138.events;
+function ProducerHistory(_ref141) {
+  let events = _ref141.events;
   const actions = {
     create: "Создано",
     update: "Изменено",
@@ -19445,26 +19600,26 @@ function ProducerHistory(_ref138) {
     }, React.createElement("span", null, event.entity === "productionApproval" && event.action === "restore" ? "Возвращено на согласование" : actions[event.action] || event.action), React.createElement("strong", null, ((_event$details2 = event.details) === null || _event$details2 === void 0 ? void 0 : _event$details2.label) || "Изменение"), React.createElement("small", null, event.userName, " \xB7 ", new Date(event.occurredAt).toLocaleString("ru-RU")));
   }) : React.createElement("p", null, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0432\u043E\u0433\u043E \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F.")));
 }
-function ProducerBlockPage(_ref139) {
-  let blockId = _ref139.blockId,
-    go = _ref139.go,
-    toast = _ref139.toast;
-  const _useState243 = useState(null),
-    _useState244 = _slicedToArray(_useState243, 2),
-    result = _useState244[0],
-    setResult = _useState244[1];
-  const _useState245 = useState(""),
-    _useState246 = _slicedToArray(_useState245, 2),
-    error = _useState246[0],
-    setError = _useState246[1];
-  const _useState247 = useState(""),
+function ProducerBlockPage(_ref142) {
+  let blockId = _ref142.blockId,
+    go = _ref142.go,
+    toast = _ref142.toast;
+  const _useState247 = useState(null),
     _useState248 = _slicedToArray(_useState247, 2),
-    groupName = _useState248[0],
-    setGroupName = _useState248[1];
-  const _useState249 = useState(false),
+    result = _useState248[0],
+    setResult = _useState248[1];
+  const _useState249 = useState(""),
     _useState250 = _slicedToArray(_useState249, 2),
-    saving = _useState250[0],
-    setSaving = _useState250[1];
+    error = _useState250[0],
+    setError = _useState250[1];
+  const _useState251 = useState(""),
+    _useState252 = _slicedToArray(_useState251, 2),
+    groupName = _useState252[0],
+    setGroupName = _useState252[1];
+  const _useState253 = useState(false),
+    _useState254 = _slicedToArray(_useState253, 2),
+    saving = _useState254[0],
+    setSaving = _useState254[1];
   const load = () => producerRequest("/api/producer/blocks/" + encodeURIComponent(blockId)).then(data => {
     setResult(data);
     setError("");
@@ -19591,6 +19746,17 @@ function ProducerBlockPage(_ref139) {
       setError(e.message);
     }
   }
+  function focusWarning(item) {
+    const targetId = item.taskId ? "producer-task-" + item.taskId : item.approvalId ? "producer-approval-" + item.approvalId : "producer-block-deadline";
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+    target.classList.add("producer-focus-flash");
+    window.setTimeout(() => target.classList.remove("producer-focus-flash"), 1800);
+  }
   if (!result) return React.createElement("main", {
     className: "producer-main"
   }, error ? React.createElement("div", {
@@ -19630,7 +19796,18 @@ function ProducerBlockPage(_ref139) {
     className: "producer-eyebrow"
   }, series ? series.name : "ОБЩИЙ БЛОК"), React.createElement("h1", null, block.name), React.createElement("p", null, block.description || "Описание можно добавить позже.")), React.createElement("div", {
     className: "producer-block-meta"
-  }, React.createElement("span", null, React.createElement("small", null, "\u041E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0439"), React.createElement("strong", null, block.ownerName || "Не назначен")), React.createElement("span", null, React.createElement("small", null, "\u041F\u0435\u0440\u0438\u043E\u0434"), React.createElement("strong", null, block.startDate ? producerDate(block.startDate) + " — " : "", producerDate(block.deadline))), React.createElement("span", null, React.createElement("small", null, "\u0413\u043E\u0442\u043E\u0432\u043D\u043E\u0441\u0442\u044C"), React.createElement(ProducerProgress, {
+  }, React.createElement("span", null, React.createElement("small", null, "\u041E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0439"), React.createElement("strong", {
+    className: "producer-owner-with-avatar"
+  }, React.createElement(ProducerAvatar, {
+    person: {
+      id: block.ownerPersonId,
+      name: block.ownerName
+    },
+    size: "small"
+  }), block.ownerName || "Не назначен")), React.createElement("span", {
+    id: "producer-block-deadline",
+    className: "due-" + producerDueState(block.deadline, block.status === "done")
+  }, React.createElement("small", null, "\u041F\u0435\u0440\u0438\u043E\u0434"), React.createElement("strong", null, block.startDate ? producerDate(block.startDate) + " — " : "", producerDate(block.deadline)), React.createElement("em", null, producerRelativeDue(block.deadline))), React.createElement("span", null, React.createElement("small", null, "\u0413\u043E\u0442\u043E\u0432\u043D\u043E\u0441\u0442\u044C"), React.createElement(ProducerProgress, {
     done: block.completedTasks,
     total: block.totalTasks
   })))), error && React.createElement("div", {
@@ -19640,7 +19817,8 @@ function ProducerBlockPage(_ref139) {
   }, React.createElement("div", {
     className: "producer-task-area"
   }, React.createElement(ProducerWarnings, {
-    warnings: warnings
+    warnings: warnings,
+    onFocus: focusWarning
   }), React.createElement("div", {
     className: "producer-section-head"
   }, React.createElement("div", null, React.createElement("span", {
@@ -19712,22 +19890,22 @@ function ProducerBlockPage(_ref139) {
     disabled: saving || !groupName.trim()
   }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C"))))));
 }
-function ProducerWorkspace(_ref140) {
-  let user = _ref140.user,
-    data = _ref140.data,
-    onExit = _ref140.onExit;
-  const _useState251 = useState(() => producerInitialScreen()),
-    _useState252 = _slicedToArray(_useState251, 2),
-    screen = _useState252[0],
-    setScreen = _useState252[1];
-  const _useState253 = useState(""),
-    _useState254 = _slicedToArray(_useState253, 2),
-    toastMessage = _useState254[0],
-    setToastMessage = _useState254[1];
-  const _useState255 = useState(0),
+function ProducerWorkspace(_ref143) {
+  let user = _ref143.user,
+    data = _ref143.data,
+    onExit = _ref143.onExit;
+  const _useState255 = useState(() => producerInitialScreen()),
     _useState256 = _slicedToArray(_useState255, 2),
-    refreshKey = _useState256[0],
-    setRefreshKey = _useState256[1];
+    screen = _useState256[0],
+    setScreen = _useState256[1];
+  const _useState257 = useState(""),
+    _useState258 = _slicedToArray(_useState257, 2),
+    toastMessage = _useState258[0],
+    setToastMessage = _useState258[1];
+  const _useState259 = useState(0),
+    _useState260 = _slicedToArray(_useState259, 2),
+    refreshKey = _useState260[0],
+    setRefreshKey = _useState260[1];
   useEffect(() => {
     const update = () => setScreen(producerInitialScreen());
     window.addEventListener("hashchange", update);
@@ -19773,51 +19951,51 @@ function ProducerWorkspace(_ref140) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState257 = useState(null),
-    _useState258 = _slicedToArray(_useState257, 2),
-    rawData = _useState258[0],
-    setRawData = _useState258[1];
-  const _useState259 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
-    _useState260 = _slicedToArray(_useState259, 2),
-    workspace = _useState260[0],
-    setWorkspace = _useState260[1];
-  const _useState261 = useState("today"),
+  const _useState261 = useState(null),
     _useState262 = _slicedToArray(_useState261, 2),
-    view = _useState262[0],
-    setView = _useState262[1];
-  const _useState263 = useState(() => parseHash()),
+    rawData = _useState262[0],
+    setRawData = _useState262[1];
+  const _useState263 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
     _useState264 = _slicedToArray(_useState263, 2),
-    navState = _useState264[0],
-    setNavState = _useState264[1];
-  const _useState265 = useState("ok"),
+    workspace = _useState264[0],
+    setWorkspace = _useState264[1];
+  const _useState265 = useState("today"),
     _useState266 = _slicedToArray(_useState265, 2),
-    syncState = _useState266[0],
-    setSyncState = _useState266[1];
-  const _useState267 = useState(""),
+    view = _useState266[0],
+    setView = _useState266[1];
+  const _useState267 = useState(() => parseHash()),
     _useState268 = _slicedToArray(_useState267, 2),
-    syncError = _useState268[0],
-    setSyncError = _useState268[1];
-  const _useState269 = useState(false),
+    navState = _useState268[0],
+    setNavState = _useState268[1];
+  const _useState269 = useState("ok"),
     _useState270 = _slicedToArray(_useState269, 2),
-    dayShiftsModal = _useState270[0],
-    setDayShiftsModal = _useState270[1];
-  const _useState271 = useState(null),
+    syncState = _useState270[0],
+    setSyncState = _useState270[1];
+  const _useState271 = useState(""),
     _useState272 = _slicedToArray(_useState271, 2),
-    ganttDay = _useState272[0],
-    setGanttDay = _useState272[1];
+    syncError = _useState272[0],
+    setSyncError = _useState272[1];
   const _useState273 = useState(false),
     _useState274 = _slicedToArray(_useState273, 2),
-    cmdPaletteOpen = _useState274[0],
-    setCmdPaletteOpen = _useState274[1];
-  const isMobile = useIsMobile(760);
+    dayShiftsModal = _useState274[0],
+    setDayShiftsModal = _useState274[1];
   const _useState275 = useState(null),
     _useState276 = _slicedToArray(_useState275, 2),
-    user = _useState276[0],
-    setUser = _useState276[1];
-  const _useState277 = useState(null),
+    ganttDay = _useState276[0],
+    setGanttDay = _useState276[1];
+  const _useState277 = useState(false),
     _useState278 = _slicedToArray(_useState277, 2),
-    loginError = _useState278[0],
-    setLoginError = _useState278[1];
+    cmdPaletteOpen = _useState278[0],
+    setCmdPaletteOpen = _useState278[1];
+  const isMobile = useIsMobile(760);
+  const _useState279 = useState(null),
+    _useState280 = _slicedToArray(_useState279, 2),
+    user = _useState280[0],
+    setUser = _useState280[1];
+  const _useState281 = useState(null),
+    _useState282 = _slicedToArray(_useState281, 2),
+    loginError = _useState282[0],
+    setLoginError = _useState282[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
@@ -20258,10 +20436,10 @@ function App() {
       const merged = {
         ...d
       };
-      for (const _ref141 of Object.entries(changes)) {
-        var _ref142 = _slicedToArray(_ref141, 2);
-        const key = _ref142[0];
-        const val = _ref142[1];
+      for (const _ref144 of Object.entries(changes)) {
+        var _ref145 = _slicedToArray(_ref144, 2);
+        const key = _ref145[0];
+        const val = _ref145[1];
         if (SOFT_DELETE_KEYS.includes(key) && Array.isArray(val)) {
           const deletedItems = (d[key] || []).filter(x => x.deleted);
           merged[key] = [...val, ...deletedItems.filter(x => !val.some(v => String(v.id) === String(x.id)))];
@@ -20794,10 +20972,10 @@ function App() {
       padding: 3,
       boxShadow: "inset 0 1px 0 rgba(255,255,255,.035)"
     }
-  }, TABS.map(_ref143 => {
-    let id = _ref143.id,
-      label = _ref143.label,
-      warn = _ref143.warn;
+  }, TABS.map(_ref146 => {
+    let id = _ref146.id,
+      label = _ref146.label,
+      warn = _ref146.warn;
     return React.createElement("button", {
       key: id,
       onClick: () => {

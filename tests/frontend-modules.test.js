@@ -43,3 +43,14 @@ test('key screens and application concerns live in their own source modules', ()
     assert.equal(completeSource.split(signature).length - 1, 1, signature);
   }
 });
+
+test('producer dashboard exposes the personal hierarchy and direct warning navigation', () => {
+  const source = fs.readFileSync(path.join(root, 'src', 'features', 'producer', 'index.jsx'), 'utf8');
+  assert.ok(source.includes('Что важно сегодня'));
+  assert.ok(source.includes('Что мешает работе'));
+  assert.ok(source.includes('Проектная полка'));
+  assert.ok(source.includes('onDoubleClick={()=>go("project",project.id)}'));
+  assert.ok(source.includes('target.scrollIntoView'));
+  assert.ok(source.includes('ProducerAvatar'));
+  assert.equal(source.includes('Проект целиком'), false);
+});

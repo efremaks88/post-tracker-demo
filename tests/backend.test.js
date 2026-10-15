@@ -233,6 +233,10 @@ test('D2 approvals use decision rights, drive warnings and retain an audited dec
   assert.equal(projectMap.blocks.find(item=>item.id===blockId).warningCount,loaded.body.warnings.length);
   const dashboard=(await request('/api/producer/dashboard')).body;
   assert.equal(dashboard.projects.find(item=>item.id==='p').warningCount,loaded.body.warnings.length);
+  assert.deepEqual(dashboard.projects.find(item=>item.id==='p').team,[{id:'producer-a',name:'Продюсер А'}]);
+  assert.ok(dashboard.attention.some(item=>item.kind==='task'&&item.reason==='Задача просрочена'));
+  assert.ok(dashboard.attention.some(item=>item.kind==='block'&&item.reason==='Просрочен срок блока'));
+  assert.ok(dashboard.attention.some(item=>item.kind==='approval'&&item.reason==='Согласование отклонено'));
   const actions=(await pool.query("SELECT action,user_name FROM audit_log WHERE entity='productionApproval' ORDER BY id")).rows;
   assert.deepEqual(actions.map(item=>item.action),['create','approve','restore','reject']);
   assert.deepEqual(actions.map(item=>item.user_name),['Пользователь 3','Пользователь 2','Пользователь 1','Пользователь 1']);
