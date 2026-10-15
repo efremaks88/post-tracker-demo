@@ -142,6 +142,57 @@ test('producer vertical slice persists blocks, groups, assignments, completion a
   assert.equal((await request('/api/producer/projects/p/blocks','POST',{name:'Блок менеджера',ownerPersonId:'producer-a'},3)).status,200);
   assert.equal((await request('/api/producer/projects/other/blocks','POST',{name:'Чужой блок',ownerPersonId:'producer-a'},3)).status,403);
 });
+test('D1 edits tasks and blocks and removes groups without losing their tasks',async()=>{
+  await fixture();
+  await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1'});
+  await request('/api/data/person','POST',{id:'producer-b',name:'Продюсер Б'});
+  await pool.query('TRUNCATE audit_log RESTART IDENTITY');
+  const blockId=(await request('/api/producer/projects/p/blocks','POST',{
+    name:'Подготовка',description:'Черновик',ownerPersonId:'producer-a',startDate:'2026-10-16',deadline:'2026-10-20',status:'active',
+  })).body.id;
+  const firstGroup=(await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Сценарий'})).body.id;
+  const secondGroup=(await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Документы'})).body.id;
+  const taskId=(await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Черновая задача',groupId:firstGroup,assigneePersonId:'producer-a',
+  })).body.id;
+
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{
+    title:'Подготовить договор',groupId:secondGroup,assigneePersonId:'producer-b',responsiblePersonId:'producer-a',deadline:'2026-10-19',
+  })).status,200);
+  assert.equal((await request('/api/producer/groups/'+secondGroup,'PATCH',{name:'Договоры'})).status,200);
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{groupId:firstGroup})).status,200);
+  assert.equal((await request('/api/producer/blocks/'+blockId,'PATCH',{
+    name:'Подготовка проекта',description:'Обновлено',ownerPersonId:'producer-b',startDate:'2026-10-17',deadline:'2026-10-21',status:'active',
+  })).status,200);
+  const removed=await request('/api/producer/groups/'+firstGroup,'DELETE');
+  assert.equal(removed.status,200);assert.equal(removed.body.movedTasks,1);
+
+  let loaded=(await request('/api/producer/blocks/'+blockId)).body;
+  assert.equal(loaded.block.name,'Подготовка проекта');assert.equal(loaded.block.ownerName,'Продюсер Б');
+  assert.equal(loaded.block.startDate,'2026-10-17');assert.equal(loaded.block.deadline,'2026-10-21');
+  assert.deepEqual(loaded.groups.map(item=>item.name),['Договоры']);
+  assert.equal(loaded.tasks[0].title,'Подготовить договор');assert.equal(loaded.tasks[0].groupId,null);
+  assert.equal(loaded.tasks[0].assigneeName,'Продюсер Б');assert.equal(loaded.tasks[0].responsibleName,'Продюсер А');
+  assert.equal(loaded.tasks[0].deadline,'2026-10-19');
+
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{completed:true})).status,200);
+  let projectMap=(await request('/api/producer/projects/p')).body;
+  assert.equal(projectMap.blocks.find(item=>item.id===blockId).completedTasks,1);
+  assert.equal((await request('/api/producer/dashboard')).body.projects.find(item=>item.id==='p').progress,100);
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{completed:false})).status,200);
+  loaded=(await request('/api/producer/blocks/'+blockId)).body;
+  assert.equal(loaded.tasks[0].completed,false);assert.ok(loaded.history.some(event=>event.action==='delete'&&event.entity==='productionGroup'));
+  assert.ok(loaded.history.some(event=>event.action==='move'&&event.entity==='productionTask'));
+  assert.ok(loaded.history.some(event=>event.action==='complete'));
+  assert.ok(loaded.history.some(event=>event.action==='restore'));
+
+  const otherBlock=(await request('/api/producer/projects/other/blocks','POST',{name:'Чужой',ownerPersonId:'producer-a'})).body.id;
+  const foreignGroup=(await request('/api/producer/blocks/'+otherBlock+'/groups','POST',{name:'Чужая группа'})).body.id;
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{groupId:foreignGroup})).status,400);
+  const auditBefore=(await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n;
+  assert.equal((await request('/api/producer/blocks/'+blockId,'PATCH',{startDate:'2026-10-30',deadline:'2026-10-20'})).status,400);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n,auditBefore);
+});
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);
   assert.equal((await request('/api/data/series','POST',series())).status,200);

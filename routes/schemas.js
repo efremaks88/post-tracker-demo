@@ -122,9 +122,20 @@ var producerBlockSchema = z.object({
   description: z.string().trim().max(2000).default(''),
   seriesId: z.string().trim().min(1).nullable().optional(),
   ownerPersonId: z.string().trim().min(1),
+  startDate: isoDate.nullable().optional(),
   deadline: isoDate.nullable().optional(),
   status: z.enum(['planned','active','done','paused']).default('planned'),
-});
+}).refine(function(value) { return !value.startDate || !value.deadline || value.startDate <= value.deadline; }, {message:'Block deadline precedes start date',path:['deadline']});
+var producerBlockUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(2000).optional(),
+  seriesId: z.string().trim().min(1).nullable().optional(),
+  ownerPersonId: z.string().trim().min(1).optional(),
+  startDate: isoDate.nullable().optional(),
+  deadline: isoDate.nullable().optional(),
+  status: z.enum(['planned','active','done','paused']).optional(),
+}).refine(function(value) { return Object.keys(value).length > 0; }, 'No changes supplied')
+  .refine(function(value) { return !value.startDate || !value.deadline || value.startDate <= value.deadline; }, {message:'Block deadline precedes start date',path:['deadline']});
 var producerGroupSchema = z.object({name:z.string().trim().min(1).max(120)});
 var producerTaskSchema = z.object({
   title: z.string().trim().min(1).max(300),
@@ -172,4 +183,5 @@ module.exports = {
   projectSchema, seriesSchema, taskSchema, personSchema, achievementSchema,
   loginSchema, roleSchema, stageSchema, absenceSchema, bulkSchema, validate,
   producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema,
+  producerBlockUpdateSchema,
 };

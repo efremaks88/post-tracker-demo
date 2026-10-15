@@ -3,7 +3,7 @@ const { auditMutation } = require('../lib/audit');
 const createProducerModel = require('../lib/models/producer');
 const { PERMISSIONS } = require('../lib/policy');
 const {
-  producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
+  producerBlockSchema, producerBlockUpdateSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
 } = require('./schemas');
 
 module.exports = function registerProducerRoutes(app, pool, deps) {
@@ -76,6 +76,17 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     return {ok:true,id:result.id};
   }));
 
+  app.patch('/api/producer/blocks/:blockId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerBlockUpdateSchema), write(['productionBlock'], async function(req,res) {
+    const projectId = await Producer.blockProjectId(req._tx,req.params.blockId);
+    if (!projectId) throw Object.assign(new Error('Блок не найден'),{status:404});
+    if (!(await mayEdit(req,projectId,req._tx))) {
+      res.status(403).json({error:'Нет прав на изменение проекта'});
+      return null;
+    }
+    await Producer.updateBlock(req._tx,req.params.blockId,req.body);
+    return {ok:true};
+  }));
+
   app.post('/api/producer/blocks/:blockId/groups', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerGroupSchema), write(['productionGroup'], async function(req,res) {
     const projectId = await Producer.blockProjectId(req._tx,req.params.blockId);
     if (!projectId) throw Object.assign(new Error('Блок не найден'),{status:404});
@@ -85,6 +96,28 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     }
     const result = await Producer.createGroup(req._tx,req.params.blockId,req.body);
     return {ok:true,id:result.id};
+  }));
+
+  app.patch('/api/producer/groups/:groupId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerGroupSchema), write(['productionGroup'], async function(req,res) {
+    const projectId = await Producer.groupProjectId(req._tx,req.params.groupId);
+    if (!projectId) throw Object.assign(new Error('Группа не найдена'),{status:404});
+    if (!(await mayEdit(req,projectId,req._tx))) {
+      res.status(403).json({error:'Нет прав на изменение проекта'});
+      return null;
+    }
+    await Producer.updateGroup(req._tx,req.params.groupId,req.body);
+    return {ok:true};
+  }));
+
+  app.delete('/api/producer/groups/:groupId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), write(['productionGroup','productionTask'], async function(req,res) {
+    const projectId = await Producer.groupProjectId(req._tx,req.params.groupId);
+    if (!projectId) throw Object.assign(new Error('Группа не найдена'),{status:404});
+    if (!(await mayEdit(req,projectId,req._tx))) {
+      res.status(403).json({error:'Нет прав на изменение проекта'});
+      return null;
+    }
+    const result = await Producer.deleteGroup(req._tx,req.params.groupId);
+    return {ok:true,movedTasks:result.movedTasks};
   }));
 
   app.post('/api/producer/blocks/:blockId/tasks', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerTaskSchema), write(['productionTask'], async function(req,res) {
