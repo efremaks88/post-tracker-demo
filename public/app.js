@@ -18530,7 +18530,7 @@ function ProducerProjectArt(_ref125) {
   const cell = PRODUCER_PROJECT_ART[project.id];
   const style = cell ? {
     backgroundImage: 'url("/demo/project-covers-v1.png")',
-    backgroundSize: "400% 200%",
+    backgroundSize: "400% auto",
     backgroundPosition: `${cell[0] * 100 / 3}% ${cell[1] * 100}%`
   } : {
     background: project.color
@@ -18543,6 +18543,30 @@ function ProducerProjectArt(_ref125) {
       background: project.color
     }
   }));
+}
+function ProducerWeatherDoodle() {
+  return React.createElement("div", {
+    className: "producer-weather-doodle",
+    "aria-label": "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0434\u0435\u043D\u044C \u0434\u043B\u044F \u0440\u0430\u0431\u043E\u0442\u044B"
+  }, React.createElement("svg", {
+    viewBox: "0 0 118 94",
+    role: "img",
+    "aria-label": "\u0420\u0438\u0441\u043E\u0432\u0430\u043D\u043D\u043E\u0435 \u0443\u043B\u044B\u0431\u0430\u044E\u0449\u0435\u0435\u0441\u044F \u0441\u043E\u043B\u043D\u0446\u0435"
+  }, React.createElement("g", {
+    className: "producer-sun-rays"
+  }, React.createElement("path", {
+    d: "M58 4v13M58 77v13M15 47H3M113 47h-13M27 16l8 10M89 17l-8 10M26 78l9-10M90 77l-9-10"
+  })), React.createElement("path", {
+    className: "producer-sun-body",
+    d: "M88 47c0 17-13 30-30 30S28 64 28 47 41 17 58 17s30 13 30 30Z"
+  }), React.createElement("g", {
+    className: "producer-sun-face"
+  }, React.createElement("path", {
+    d: "M45 43c2-2 4-2 6 0M66 43c2-2 4-2 6 0"
+  }), React.createElement("path", {
+    className: "producer-sun-smile",
+    d: "M46 55c7 8 17 8 24 0"
+  }))), React.createElement("span", null, React.createElement("b", null, "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u2014 \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0434\u0435\u043D\u044C"), React.createElement("small", null, "\u0434\u043B\u044F \u0431\u043E\u043B\u044C\u0448\u0438\u0445 \u0438\u0441\u0442\u043E\u0440\u0438\u0439")));
 }
 function ProducerDateField(_ref126) {
   let value = _ref126.value,
@@ -18784,10 +18808,7 @@ function ProducerDashboard(_ref131) {
     className: "producer-main"
   }, React.createElement("section", {
     className: "producer-home-hero"
-  }, React.createElement("div", null, React.createElement("h1", null, greeting, ", ", firstName, "!"), React.createElement("p", null, "\u0417\u0434\u0435\u0441\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0442\u043E, \u0447\u0442\u043E \u043F\u043E\u043C\u043E\u0433\u0430\u0435\u0442 \u0434\u0432\u0438\u0433\u0430\u0442\u044C \u043F\u0440\u043E\u0435\u043A\u0442\u044B \u0432\u043F\u0435\u0440\u0451\u0434.")), React.createElement("div", {
-    className: "producer-doodle",
-    "aria-hidden": "true"
-  }, React.createElement("span", null, "\u2301"), React.createElement("b", null, "\u0431\u043E\u043B\u044C\u0448\u0438\u0435 \u0438\u0441\u0442\u043E\u0440\u0438\u0438", React.createElement("br", null), "\u0441\u043E\u0431\u0438\u0440\u0430\u044E\u0442\u0441\u044F \u043F\u043E \u043A\u0430\u0434\u0440\u0430\u043C"))), React.createElement("section", {
+  }, React.createElement("div", null, React.createElement("h1", null, greeting, ", ", firstName, "!"), React.createElement("p", null, "\u0417\u0434\u0435\u0441\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0442\u043E, \u0447\u0442\u043E \u043F\u043E\u043C\u043E\u0433\u0430\u0435\u0442 \u0434\u0432\u0438\u0433\u0430\u0442\u044C \u043F\u0440\u043E\u0435\u043A\u0442\u044B \u0432\u043F\u0435\u0440\u0451\u0434.")), React.createElement(ProducerWeatherDoodle, null)), React.createElement("section", {
     className: "producer-home-projects"
   }, React.createElement("header", {
     className: "producer-clean-heading"

@@ -58,8 +58,24 @@ function ProducerAvatar({person,size="normal",title}){
 
 function ProducerProjectArt({project}){
   const cell=PRODUCER_PROJECT_ART[project.id];
-  const style=cell?{backgroundImage:'url("/demo/project-covers-v1.png")',backgroundSize:"400% 200%",backgroundPosition:`${cell[0]*100/3}% ${cell[1]*100}%`}:{background:project.color};
+  const style=cell?{backgroundImage:'url("/demo/project-covers-v1.png")',backgroundSize:"400% auto",backgroundPosition:`${cell[0]*100/3}% ${cell[1]*100}%`}:{background:project.color};
   return <span className="producer-project-art" style={style}><i style={{background:project.color}}/></span>;
+}
+
+function ProducerWeatherDoodle(){
+  return <div className="producer-weather-doodle" aria-label="Сегодня хороший день для работы">
+    <svg viewBox="0 0 118 94" role="img" aria-label="Рисованное улыбающееся солнце">
+      <g className="producer-sun-rays">
+        <path d="M58 4v13M58 77v13M15 47H3M113 47h-13M27 16l8 10M89 17l-8 10M26 78l9-10M90 77l-9-10"/>
+      </g>
+      <path className="producer-sun-body" d="M88 47c0 17-13 30-30 30S28 64 28 47 41 17 58 17s30 13 30 30Z"/>
+      <g className="producer-sun-face">
+        <path d="M45 43c2-2 4-2 6 0M66 43c2-2 4-2 6 0"/>
+        <path className="producer-sun-smile" d="M46 55c7 8 17 8 24 0"/>
+      </g>
+    </svg>
+    <span><b>Сегодня — хороший день</b><small>для больших историй</small></span>
+  </div>;
 }
 
 function ProducerDateField({value,onChange,label}){
@@ -157,7 +173,7 @@ function ProducerDashboard({go,refreshKey,user}){
   return <main className="producer-main">
     <section className="producer-home-hero">
       <div><h1>{greeting}, {firstName}!</h1><p>Здесь только то, что помогает двигать проекты вперёд.</p></div>
-      <div className="producer-doodle" aria-hidden="true"><span>⌁</span><b>большие истории<br/>собираются по кадрам</b></div>
+      <ProducerWeatherDoodle/>
     </section>
     <section className="producer-home-projects">
       <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><button onClick={()=>go("projects")}>Смотреть все проекты →</button></header>
