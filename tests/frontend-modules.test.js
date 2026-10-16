@@ -46,11 +46,15 @@ test('key screens and application concerns live in their own source modules', ()
 
 test('producer dashboard exposes the personal hierarchy and direct warning navigation', () => {
   const source = fs.readFileSync(path.join(root, 'src', 'features', 'producer', 'index.jsx'), 'utf8');
-  assert.ok(source.includes('Что важно сегодня'));
-  assert.ok(source.includes('Что мешает работе'));
-  assert.ok(source.includes('Проектная полка'));
+  assert.ok(source.includes('Проекты в работе'));
+  assert.ok(source.includes('Требует внимания'));
+  assert.ok(source.includes('function ProducerCalendarPage('));
+  assert.ok(source.includes('function ProducerHistoryPage('));
+  assert.ok(source.includes('Фильтр истории по автору'));
+  assert.ok(source.includes('Внутренний комментарий'));
   assert.ok(source.includes('onDoubleClick={()=>go("project",project.id)}'));
   assert.ok(source.includes('target.scrollIntoView'));
   assert.ok(source.includes('ProducerAvatar'));
+  assert.equal(source.includes('Проектная полка'), false);
   assert.equal(source.includes('Проект целиком'), false);
 });

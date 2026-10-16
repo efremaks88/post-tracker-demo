@@ -12,6 +12,19 @@ function producerDate(value){
   return parts.length===3?`${parts[2]}.${parts[1]}.${parts[0]}`:String(value);
 }
 
+function producerDateInput(value){return value?producerDate(value):"";}
+function producerIsoFromInput(value){
+  const text=String(value||"").trim();
+  if(!text)return "";
+  const isoMatch=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(isoMatch){const day=producerDay(text);return day&&day.getFullYear()===Number(isoMatch[1])&&day.getMonth()+1===Number(isoMatch[2])&&day.getDate()===Number(isoMatch[3])?text:null;}
+  const match=text.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/);
+  if(!match)return null;
+  const iso=`${match[3]}-${match[2].padStart(2,"0")}-${match[1].padStart(2,"0")}`;
+  const day=producerDay(iso);
+  return day&&day.getFullYear()===Number(match[3])&&day.getMonth()+1===Number(match[2])&&day.getDate()===Number(match[1])?iso:null;
+}
+
 function producerDay(value){return value?new Date(String(value).slice(0,10)+"T12:00:00"):null;}
 function producerDueState(value,complete){
   if(!value||complete)return "normal";
@@ -49,9 +62,35 @@ function ProducerProjectArt({project}){
   return <span className="producer-project-art" style={style}><i style={{background:project.color}}/></span>;
 }
 
+function ProducerDateField({value,onChange,label}){
+  const [text,setText]=useState(()=>producerDateInput(value));
+  const [invalid,setInvalid]=useState(false);
+  const picker=useRef(null);
+  useEffect(()=>{setText(producerDateInput(value));setInvalid(false);},[value]);
+  function type(next){
+    setText(next);
+    const parsed=producerIsoFromInput(next);
+    setInvalid(parsed===null);
+    if(parsed!==null)onChange(parsed);
+  }
+  function openPicker(){
+    if(!picker.current)return;
+    if(typeof picker.current.showPicker==="function")picker.current.showPicker();
+    else picker.current.click();
+  }
+  return <span className={"producer-date-field"+(invalid?" invalid":"")}>
+    <input aria-label={label} inputMode="numeric" value={text} onChange={e=>type(e.target.value)} onBlur={()=>{if(invalid){setText(producerDateInput(value));setInvalid(false);}}} placeholder="ДД.ММ.ГГГГ"/>
+    <button type="button" title="Выбрать дату в календаре" aria-label={"Открыть календарь: "+label} onClick={openPicker}>▦</button>
+    <input ref={picker} className="producer-date-native" tabIndex="-1" type="date" value={value||""} onChange={e=>onChange(e.target.value)}/>
+  </span>;
+}
+
 function producerInitialScreen(){
-  const match=String(window.location.hash||"").match(/^#producer(?:\/(project|block)\/([^/]+))?/);
-  return match&&match[1]?{type:match[1],id:decodeURIComponent(match[2])}:{type:"dashboard",id:""};
+  const hash=String(window.location.hash||"");
+  const detail=hash.match(/^#producer\/(project|block)\/([^/]+)/);
+  if(detail)return {type:detail[1],id:decodeURIComponent(detail[2])};
+  const section=hash.match(/^#producer\/(projects|calendar|history)$/);
+  return {type:section?section[1]:"dashboard",id:""};
 }
 
 function ProducerToast({message}){
@@ -64,79 +103,137 @@ function ProducerProgress({done,total}){
   return <div className="producer-progress"><span style={{width:percent+"%"}}/><b>{percent}%</b></div>;
 }
 
-function ProducerShell({user,onExit,children,onHome}){
+function ProducerShell({user,onExit,children,onHome,screen,go}){
   return <div className="producer-shell">
     <header className="producer-header">
       <button className="producer-brand" onClick={onHome}>
         <span className="producer-brand-mark">ПТ</span>
         <span><strong>ПОСТ ТРЕКЕР</strong><small>Продюсерская · {RUNTIME.label||"рабочая версия"}</small></span>
       </button>
-      <nav className="producer-space-switch">
-        <button className="active">Продюсерская</button>
-        <button onClick={onExit}>Постпродакшн</button>
+      <nav className="producer-main-nav" aria-label="Разделы продюсерской">
+        <button className={screen.type==="dashboard"?"active":""} onClick={()=>go("dashboard")}>Главная</button>
+        <button className={["projects","project","block"].includes(screen.type)?"active":""} onClick={()=>go("projects")}>Проекты</button>
+        <button className={screen.type==="calendar"?"active":""} onClick={()=>go("calendar")}>Календарь</button>
+        <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
       </nav>
-      <div className="producer-user"><span>{user.display_name}</span><b>{user.role}</b></div>
+      <div className="producer-user"><button onClick={onExit}>Постпродакшн</button><ProducerAvatar person={{id:"local-demo-producer",name:user.display_name}} size="small"/><span>{user.display_name}</span><b>{user.role}</b></div>
     </header>
     {children}
   </div>;
 }
 
-function ProducerDashboard({go,refreshKey}){
+const PRODUCER_STATUS_LABELS={"в работе":"В работе","постпродакшн":"В посте","съёмка":"На съёмке","подготовка":"В подготовке"};
+
+function ProducerProjectCard({project,go}){
+  const [expanded,setExpanded]=useState(false);
+  return <article className={"producer-project-preview"+(expanded?" expanded":"")} style={{"--project-color":project.color}}>
+    <button className="producer-project-preview-main" onClick={()=>setExpanded(value=>!value)} onDoubleClick={()=>go("project",project.id)}>
+      <ProducerProjectArt project={project}/>
+      <span className="producer-project-stage">● {PRODUCER_STATUS_LABELS[project.status]||project.status||"В работе"}</span>
+      {project.warningCount>0&&<span className="producer-project-alert">! {project.warningCount}</span>}
+    </button>
+    <div className="producer-project-preview-copy">
+      <strong>{project.name}</strong><small>{project.description||"Проект без описания"}</small>
+      <ProducerProgress done={project.completedTasks} total={project.totalTasks}/>
+      <div className="producer-project-preview-meta"><span className="producer-avatar-stack">{(project.team||[]).map(person=><ProducerAvatar key={person.id} person={person} size="tiny"/>)}</span><span>{project.totalTasks} задач</span><span>до {producerDate(project.nextDeadline)}</span></div>
+    </div>
+    {expanded&&<div className="producer-project-preview-detail"><span>{project.completedTasks} из {project.totalTasks} задач готовы</span><button onClick={()=>go("project",project.id)}>Открыть карту проекта →</button></div>}
+  </article>;
+}
+
+function ProducerDashboard({go,refreshKey,user}){
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
-  const [expandedProject,setExpandedProject]=useState("");
-  const [showAllAttention,setShowAllAttention]=useState(false);
+  const [openAttention,setOpenAttention]=useState("");
   useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю продюсерскую…</div></main>;
   const todayTasks=result.myTasks||[];
   const attention=result.attention||[];
-  const statusLabels={"в работе":"В работе","постпродакшн":"В посте","съёмка":"На съёмке","подготовка":"В подготовке"};
-  const statuses=result.projects.reduce((rows,project)=>{const key=statusLabels[project.status]||project.status||"Без статуса";rows[key]=(rows[key]||0)+1;return rows;},{});
+  const statuses=result.projects.reduce((rows,project)=>{const key=PRODUCER_STATUS_LABELS[project.status]||project.status||"Без статуса";rows[key]=(rows[key]||0)+1;return rows;},{});
+  const attentionGroups=attention.reduce((rows,item)=>{let group=rows.find(row=>row.id===item.projectId);if(!group){group={id:item.projectId,name:item.projectName,color:item.projectColor,items:[]};rows.push(group);}group.items.push(item);return rows;},[]);
+  const firstName=String(user.display_name||"Коллега").split(/\s+/)[0];
+  const hour=new Date().getHours();const greeting=hour<12?"Доброе утро":hour<18?"Добрый день":"Добрый вечер";
   return <main className="producer-main">
-    <section className="producer-welcome">
-      <div><span className="producer-eyebrow">ЛИЧНЫЙ РАБОЧИЙ СТОЛ</span><h1>Что важно сегодня</h1><p>Ваши задачи, решения и сроки — без лишнего шума.</p></div>
-      <div className="producer-today"><small>Сегодня</small><strong>{new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long"})}</strong></div>
+    <section className="producer-home-hero">
+      <div><h1>{greeting}, {firstName}!</h1><p>Здесь только то, что помогает двигать проекты вперёд.</p></div>
+      <div className="producer-doodle" aria-hidden="true"><span>⌁</span><b>большие истории<br/>собираются по кадрам</b></div>
     </section>
-    <section className="producer-overview-strip">
-      <div><strong>{result.projects.length}</strong><span>проектов в работе</span></div>
-      <div><strong>{todayTasks.length}</strong><span>ваших задач сегодня</span></div>
-      <div className={attention.some(item=>item.severity==="high")?"hot":""}><strong>{attention.length}</strong><span>ситуаций требуют решения</span></div>
-      <div className="producer-stage-summary">{Object.entries(statuses).map(([label,count])=><span key={label}><b>{count}</b> {label.toLowerCase()}</span>)}</div>
+    <section className="producer-home-projects">
+      <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><button onClick={()=>go("projects")}>Смотреть все проекты →</button></header>
+      <div className="producer-project-preview-grid">{result.projects.slice(0,3).map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>
     </section>
-    <section className="producer-daily-grid">
-      <article className="producer-my-day">
-        <header><div><span className="producer-eyebrow">МОЙ ДЕНЬ</span><h2>Задачи на сегодня</h2></div><b>{todayTasks.length}</b></header>
-        <div className="producer-my-day-list">{todayTasks.length?todayTasks.map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
-          <span className="producer-paper-check"/><span><strong>{item.title}</strong><small>{item.projectName} · {item.blockName}</small></span><i style={{background:item.projectColor}}/>
-        </button>):<p>На сегодня задач нет. Можно проверить ближайшие сроки.</p>}</div>
+    <section className="producer-home-columns">
+      <article className="producer-clean-list producer-today-list">
+        <header><h2>Мои задачи сегодня</h2><b>{todayTasks.length}</b></header>
+        <div>{todayTasks.length?todayTasks.map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
+          <span className="producer-paper-check">✓</span><span><strong>{item.title}</strong><small>{item.projectName}</small></span><time>{producerDate(item.deadline)}</time>
+        </button>):<p>На сегодня задач нет.</p>}</div>
       </article>
-      <article className="producer-attention-board">
-        <header><div><span className="producer-eyebrow">НУЖНО РАЗОБРАТЬСЯ</span><h2>Что мешает работе</h2></div><b>{attention.length}</b></header>
-        <div>{attention.length?(showAllAttention?attention:attention.slice(0,6)).map(item=><button className={item.severity} key={item.id} onClick={()=>go("block",item.blockId)}>
-          <span className="producer-attention-sign">!</span><span><em>{item.reason}</em><strong>{item.title}</strong><small>{item.projectName} · {item.detail||item.blockName}</small></span><time>{producerRelativeDue(item.deadline)}</time>
-        </button>):<p>Срочных препятствий сейчас нет.</p>}{attention.length>6&&<button className="producer-attention-more" onClick={()=>setShowAllAttention(value=>!value)}>{showAllAttention?"Скрыть менее срочные":"Показать ещё "+(attention.length-6)}</button>}</div>
+      <article className="producer-clean-list producer-deadline-list">
+        <header><h2>Ближайшие сроки</h2><button onClick={()=>go("calendar")}>Календарь →</button></header>
+        <div>{result.deadlines.length?result.deadlines.slice(0,5).map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
+          <i style={{background:item.projectColor}}/><time>{producerDate(item.deadline)}</time><span><strong>{item.title}</strong><small>{item.projectName}</small></span>
+        </button>):<p>В ближайшие две недели сроков нет.</p>}</div>
+      </article>
+      <article className="producer-attention-summary">
+        <header><span>!</span><div><h2>Требует внимания</h2><p>{attention.length} ситуаций в {attentionGroups.length} проектах</p></div></header>
+        <div>{attentionGroups.length?attentionGroups.slice(0,3).map(group=>{const open=openAttention===group.id;const visible=open?group.items:group.items.slice(0,1);return <section key={group.id} style={{"--project-color":group.color}}>
+          <button className="producer-attention-project" onClick={()=>setOpenAttention(open?"":group.id)}><i/><strong>{group.name}</strong><b>{group.items.length}</b><span>{open?"−":"+"}</span></button>
+          {visible.map(item=><button className="producer-attention-item" key={item.id} onClick={()=>go("block",item.blockId)}><span><em>{item.reason}</em><strong>{item.title}</strong></span><time>{producerRelativeDue(item.deadline)} →</time></button>)}
+        </section>}):<p>Срочных препятствий сейчас нет.</p>}</div>
       </article>
     </section>
-    <section className="producer-deadline-section">
-      <header><div><span className="producer-eyebrow">БЛИЖАЙШИЕ 14 ДНЕЙ</span><h2>Линия сроков</h2></div><p>Сроки идут слева направо; цвет показывает срочность.</p></header>
-      <div className="producer-deadline-rail">{result.deadlines.length?result.deadlines.map(item=><button className={producerDueState(item.deadline,false)} key={item.id} onClick={()=>go("block",item.blockId)} style={{"--project-color":item.projectColor}}>
-        <time>{producerDate(item.deadline)}</time><strong>{item.title}</strong><small>{item.projectName}</small>
-      </button>):<p>В ближайшие две недели сроков нет.</p>}</div>
-    </section>
-    <section className="producer-project-shelf-section">
-      <header><div><span className="producer-eyebrow">ПРОЕКТЫ</span><h2>Проектная полка</h2></div><p>Нажмите один раз для деталей, два раза — чтобы открыть карту.</p></header>
-      <div className="producer-project-shelf">
-        {result.projects.map(project=>{const expanded=expandedProject===project.id;return <article className={"producer-project-tile"+(expanded?" expanded":"")} key={project.id} style={{"--project-color":project.color}}>
-          <button className="producer-project-tile-main" onClick={()=>setExpandedProject(expanded?"":project.id)} onDoubleClick={()=>go("project",project.id)}>
-            <ProducerProjectArt project={project}/><span className="producer-project-tile-copy"><small>{statusLabels[project.status]||project.status||"В работе"}</small><strong>{project.name}</strong><em>{project.description||"Проект без описания"}</em></span>
-            {project.warningCount>0&&<span className="producer-warning-badge">! {project.warningCount}</span>}
-          </button>
-          <div className="producer-project-tile-foot"><ProducerProgress done={project.completedTasks} total={project.totalTasks}/><span>{project.completedTasks}/{project.totalTasks} задач</span></div>
-          {expanded&&<div className="producer-project-tile-detail"><div className="producer-avatar-stack">{(project.team||[]).map(person=><ProducerAvatar key={person.id} person={person} size="small"/>)}</div><span>Ближайший срок: <b>{producerDate(project.nextDeadline)}</b></span><button onClick={()=>go("project",project.id)}>Открыть карту →</button></div>}
-        </article>})}
-      </div>
-    </section>
+  </main>;
+}
+
+function ProducerProjectsPage({go,refreshKey}){
+  const [result,setResult]=useState(null);const [error,setError]=useState("");
+  useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю проекты…</div></main>;
+  return <main className="producer-main producer-directory-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ВСЕ ПРОЕКТЫ</span><h1>Проекты</h1><p>Один щелчок показывает детали, двойной открывает карту проекта.</p></div><b>{result.projects.length} в работе</b></header><div className="producer-project-directory">{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div></main>;
+}
+
+function producerMonthStart(date){return new Date(date.getFullYear(),date.getMonth(),1,12);}
+function producerIsoLocal(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;}
+
+function ProducerCalendarPage({go,refreshKey}){
+  const [result,setResult]=useState(null);const [error,setError]=useState("");const [month,setMonth]=useState(()=>producerMonthStart(new Date()));
+  useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!result)return <main className="producer-main"><div className="producer-loading">Собираю календарь…</div></main>;
+  const first=producerMonthStart(month);const offset=(first.getDay()+6)%7;const gridStart=new Date(first);gridStart.setDate(first.getDate()-offset);
+  const days=Array.from({length:42},(_,index)=>{const value=new Date(gridStart);value.setDate(gridStart.getDate()+index);return value;});
+  const items=result.calendarItems||[];const today=producerIsoLocal(new Date());
+  function shift(value){setMonth(current=>new Date(current.getFullYear(),current.getMonth()+value,1,12));}
+  return <main className="producer-main producer-calendar-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">СРОКИ ЗАДАЧ</span><h1>Календарь</h1><p>Нажмите на срок, чтобы перейти прямо в нужный блок.</p></div><div className="producer-month-switch"><button onClick={()=>shift(-1)}>←</button><strong>{month.toLocaleDateString("ru-RU",{month:"long",year:"numeric"})}</strong><button onClick={()=>shift(1)}>→</button></div></header>
+    <div className="producer-calendar-weekdays">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(day=><span key={day}>{day}</span>)}</div>
+    <div className="producer-calendar-grid">{days.map(day=>{const iso=producerIsoLocal(day);const rows=items.filter(item=>item.deadline===iso);return <section key={iso} className={(day.getMonth()!==month.getMonth()?"outside ":"")+(iso===today?"today":"")}><time>{day.getDate()}</time><div>{rows.slice(0,3).map(item=><button key={item.id} style={{"--project-color":item.projectColor}} onClick={()=>go("block",item.blockId)} title={item.projectName+": "+item.title}><i/><span>{item.title}</span></button>)}{rows.length>3&&<small>ещё {rows.length-3}</small>}</div></section>})}</div>
+  </main>;
+}
+
+const PRODUCER_AUDIT_ACTIONS={create:"Создано",update:"Изменено",assign:"Изменён исполнитель",move:"Перемещено",reschedule:"Перенесён срок",complete:"Выполнено",restore:"Возвращено",delete:"Удалено",approve:"Согласовано",reject:"Отклонено",save:"Сохранено"};
+const PRODUCER_AUDIT_ENTITIES={project:"Проект",series:"Серия",task:"Смена",productionBlock:"Блок",productionGroup:"Группа",productionTask:"Задача",productionApproval:"Согласование",person:"Сотрудник",settings:"Настройки",bulk:"Массовое изменение"};
+const PRODUCER_AUDIT_FIELDS={title:"Название",name:"Название",internal_comment:"Внутренний комментарий",deadline:"Срок",assignee_name:"Исполнитель",responsible_name:"Ответственный",owner_name:"Ответственный блока",group_id:"Группа",status:"Статус",description:"Описание",decision_comment:"Комментарий к решению"};
+function producerAuditValue(value){
+  if(value===null||value===undefined||value==="")return "—";
+  if(value===true)return "да";if(value===false)return "нет";
+  if(Array.isArray(value))return value.length?value.map(item=>typeof item==="object"?(item.name||item.label||item.uid||JSON.stringify(item)):String(item)).join(", "):"—";
+  if(typeof value==="object")return JSON.stringify(value);
+  return String(value);
+}
+
+function ProducerHistoryPage({refreshKey}){
+  const [projects,setProjects]=useState([]);const [filters,setFilters]=useState({projectId:"",actorUserId:"",action:"",from:"",to:""});const [page,setPage]=useState(1);
+  const [result,setResult]=useState({events:[],actors:[],total:0,totalPages:1});const [error,setError]=useState("");const [loading,setLoading]=useState(true);
+  useEffect(()=>{producerRequest("/api/producer/dashboard").then(data=>setProjects(data.projects||[])).catch(()=>{});},[refreshKey]);
+  useEffect(()=>{let alive=true;const query=new URLSearchParams({page:String(page),pageSize:"30"});Object.entries(filters).forEach(([key,value])=>value&&query.set(key,value));setLoading(true);producerRequest("/api/audit/events?"+query).then(data=>{if(alive){setResult(data);setError("");}}).catch(e=>alive&&setError(e.message)).finally(()=>alive&&setLoading(false));return()=>{alive=false;};},[page,filters.projectId,filters.actorUserId,filters.action,filters.from,filters.to,refreshKey]);
+  function change(key,value){setFilters(current=>({...current,[key]:value}));setPage(1);}
+  return <main className="producer-main producer-history-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ОБЩИЙ ЖУРНАЛ</span><h1>История</h1><p>Подтверждённые изменения во всех доступных проектах.</p></div><b>{result.total} событий</b></header>
+    <div className="producer-history-filters"><select aria-label="Фильтр истории по проекту" value={filters.projectId} onChange={e=>change("projectId",e.target.value)}><option value="">Все проекты</option>{projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select><select aria-label="Фильтр истории по автору" value={filters.actorUserId} onChange={e=>change("actorUserId",e.target.value)}><option value="">Все авторы</option>{(result.actors||[]).map(actor=><option key={String(actor.id)+actor.name} value={actor.id}>{actor.name}</option>)}</select><select aria-label="Фильтр истории по действию" value={filters.action} onChange={e=>change("action",e.target.value)}><option value="">Все действия</option>{Object.entries(PRODUCER_AUDIT_ACTIONS).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select><ProducerDateField label="История с даты" value={filters.from} onChange={value=>change("from",value)}/><ProducerDateField label="История по дату" value={filters.to} onChange={value=>change("to",value)}/></div>
+    {error&&<div className="producer-inline-error">{error}</div>}{loading?<div className="producer-loading">Загружаю историю…</div>:<div className="producer-history-feed">{result.events.length?result.events.map(event=><details key={event.id}><summary><time>{new Date(event.occurredAt).toLocaleString("ru-RU")}</time><strong>{event.userName||"Система"}</strong><span><b>{PRODUCER_AUDIT_ACTIONS[event.action]||event.action}</b> {PRODUCER_AUDIT_ENTITIES[event.entity]||event.entity}{event.details?.label?": "+event.details.label:""}</span><em>{event.projectName||"Общие настройки"}</em></summary><div>{(event.changes||[]).length?(event.changes||[]).map((item,index)=><p key={item.field+index}><b>{PRODUCER_AUDIT_FIELDS[item.field]||item.field}:</b> {producerAuditValue(item.before)} <i>→</i> {producerAuditValue(item.after)}</p>):<p>Дополнительных значений нет.</p>}</div></details>):<p className="producer-history-empty">По выбранным фильтрам записей нет.</p>}</div>}
+    <div className="producer-history-pages"><button disabled={page<=1} onClick={()=>setPage(value=>value-1)}>← Новее</button><span>Страница {result.page||page} из {result.totalPages||1}</span><button disabled={page>=(result.totalPages||1)} onClick={()=>setPage(value=>value+1)}>Старее →</button></div>
   </main>;
 }
 
@@ -193,7 +290,7 @@ function ProducerProjectMap({projectId,people,go,toast}){
       <label>Короткое описание<textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Что должно быть сделано в этом блоке"/></label>
       <div className="producer-form-row"><label>Серия<select value={form.seriesId} onChange={e=>setForm({...form,seriesId:e.target.value})}><option value="">Общий блок проекта</option>{result.series.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>Ответственный<select value={form.ownerPersonId} onChange={e=>setForm({...form,ownerPersonId:e.target.value})} required><option value="">Выберите</option>{people.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
-      <div className="producer-form-row"><label>Начало<input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></label><label>Срок<input type="date" value={form.deadline} onChange={e=>setForm({...form,deadline:e.target.value})}/></label></div>
+      <div className="producer-form-row"><label>Начало<ProducerDateField label="Дата начала блока" value={form.startDate} onChange={value=>setForm({...form,startDate:value})}/></label><label>Срок<ProducerDateField label="Срок блока" value={form.deadline} onChange={value=>setForm({...form,deadline:value})}/></label></div>
       <label>Статус<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="planned">Запланировано</option><option value="active">В работе</option><option value="paused">Пауза</option><option value="done">Готово</option></select></label>
       {error&&<div className="producer-inline-error">{error}</div>}
       <div className="producer-modal-actions"><button type="button" onClick={()=>setShowCreate(false)}>Отмена</button><button className="producer-primary" disabled={saving}>{saving?"Сохраняю…":"Создать блок"}</button></div>
@@ -204,25 +301,26 @@ function ProducerProjectMap({projectId,people,go,toast}){
 function ProducerTaskRow({task,people,groups,onChange}){
   const [busy,setBusy]=useState(false);
   const [editing,setEditing]=useState(false);
-  const [draft,setDraft]=useState({title:task.title,groupId:task.groupId||"",assigneePersonId:task.assigneePersonId||"",responsiblePersonId:task.responsiblePersonId||"",deadline:task.deadline||""});
-  useEffect(()=>{if(!editing)setDraft({title:task.title,groupId:task.groupId||"",assigneePersonId:task.assigneePersonId||"",responsiblePersonId:task.responsiblePersonId||"",deadline:task.deadline||""});},[task.title,task.groupId,task.assigneePersonId,task.responsiblePersonId,task.deadline,editing]);
+  const [draft,setDraft]=useState({title:task.title,internalComment:task.internalComment||"",groupId:task.groupId||"",assigneePersonId:task.assigneePersonId||"",responsiblePersonId:task.responsiblePersonId||"",deadline:task.deadline||""});
+  useEffect(()=>{if(!editing)setDraft({title:task.title,internalComment:task.internalComment||"",groupId:task.groupId||"",assigneePersonId:task.assigneePersonId||"",responsiblePersonId:task.responsiblePersonId||"",deadline:task.deadline||""});},[task.title,task.internalComment,task.groupId,task.assigneePersonId,task.responsiblePersonId,task.deadline,editing]);
   async function update(patch){setBusy(true);try{await onChange(task.id,patch);}catch(error){}finally{setBusy(false);}}
   async function save(event){event.preventDefault();setBusy(true);try{await onChange(task.id,{...draft,groupId:draft.groupId||null,responsiblePersonId:draft.responsiblePersonId||null,deadline:draft.deadline||null});setEditing(false);}catch(error){}finally{setBusy(false);}}
   const dueState=producerDueState(task.deadline,task.completed);
   return <div id={"producer-task-"+task.id} className={"producer-task-item due-"+dueState+(task.completed?" complete":"")+(busy?" busy":"")}>
     <div className="producer-task-row">
       <label className="producer-check" title={task.completed?"Вернуть в работу":"Отметить выполненной"}><input aria-label={task.completed?"Вернуть задачу в работу":"Выполнить задачу"} type="checkbox" checked={task.completed} onChange={e=>update({completed:e.target.checked})}/><span>✓</span></label>
-      <button className="producer-task-copy" onClick={()=>setEditing(value=>!value)}><strong>{task.title}</strong><small>{task.responsibleName?"Ответственный: "+task.responsibleName:"Без отдельного ответственного"}</small></button>
+      <button className="producer-task-copy" onClick={()=>setEditing(value=>!value)}><strong>{task.title}</strong><small>{task.responsibleName?"Ответственный: "+task.responsibleName:"Без отдельного ответственного"}</small>{task.internalComment&&<em title={task.internalComment}>◌ {task.internalComment}</em>}</button>
       <div className="producer-task-assignee"><ProducerAvatar person={{id:task.assigneePersonId,name:task.assigneeName}} size="tiny"/><select aria-label={"Исполнитель задачи "+task.title} value={task.assigneePersonId||""} onChange={e=>update({assigneePersonId:e.target.value})}>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></div>
       <time className={dueState} title={producerRelativeDue(task.deadline)}>{producerDate(task.deadline)}</time>
       <button className="producer-edit-task" onClick={()=>setEditing(value=>!value)} aria-label={"Изменить задачу "+task.title}>{editing?"Скрыть":"Изменить"}</button>
     </div>
     {editing&&<form className="producer-task-editor" onSubmit={save}>
       <label>Название<input autoFocus value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} required/></label>
+      <label className="producer-task-comment-field">Внутренний комментарий<textarea value={draft.internalComment} onChange={e=>setDraft({...draft,internalComment:e.target.value})} placeholder="Контекст, договорённость или важная деталь для команды"/></label>
       <label>Исполнитель<select value={draft.assigneePersonId} onChange={e=>setDraft({...draft,assigneePersonId:e.target.value})} required>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
       <label>Ответственный<select value={draft.responsiblePersonId} onChange={e=>setDraft({...draft,responsiblePersonId:e.target.value})}><option value="">Не указан</option>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
       <label>Группа<select value={draft.groupId} onChange={e=>setDraft({...draft,groupId:e.target.value})}><option value="">Без группы</option>{groups.map(group=><option key={group.id} value={group.id}>{group.name}</option>)}</select></label>
-      <label>Срок<input type="date" value={draft.deadline} onChange={e=>setDraft({...draft,deadline:e.target.value})}/></label>
+      <label>Срок<ProducerDateField label={"Срок задачи "+task.title} value={draft.deadline} onChange={value=>setDraft({...draft,deadline:value})}/></label>
       <div className="producer-task-editor-actions"><button type="button" onClick={()=>setEditing(false)}>Отмена</button><button className="producer-primary" disabled={busy}>Сохранить</button></div>
     </form>}
   </div>;
@@ -232,13 +330,15 @@ function ProducerQuickTask({groupId,people,onCreate}){
   const [open,setOpen]=useState(false);
   const [busy,setBusy]=useState(false);
   const [title,setTitle]=useState("");
+  const [comment,setComment]=useState("");
   const [assignee,setAssignee]=useState(people[0]?.id||"");
-  async function submit(event){event.preventDefault();if(!title.trim()||!assignee)return;setBusy(true);try{await onCreate({title,groupId:groupId||null,assigneePersonId:assignee});setTitle("");setOpen(false);}catch(error){}finally{setBusy(false);}}
+  async function submit(event){event.preventDefault();if(!title.trim()||!assignee)return;setBusy(true);try{await onCreate({title,internalComment:comment,groupId:groupId||null,assigneePersonId:assignee});setTitle("");setComment("");setOpen(false);}catch(error){}finally{setBusy(false);}}
   if(!open)return <button className="producer-quick-task-open" onClick={()=>setOpen(true)}>＋ Добавить задачу</button>;
   return <form className="producer-quick-task" onSubmit={submit}>
     <input autoFocus aria-label="Название новой задачи" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что нужно сделать?" required/>
+    <input aria-label="Внутренний комментарий новой задачи" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Комментарий (необязательно)"/>
     <select aria-label="Исполнитель новой задачи" value={assignee} onChange={e=>setAssignee(e.target.value)} required><option value="">Исполнитель</option>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select>
-    <button className="producer-primary" disabled={busy}>{busy?"…":"Добавить"}</button><button type="button" onClick={()=>{setOpen(false);setTitle("");}}>Отмена</button>
+    <button className="producer-primary" disabled={busy}>{busy?"…":"Добавить"}</button><button type="button" onClick={()=>{setOpen(false);setTitle("");setComment("");}}>Отмена</button>
   </form>;
 }
 
@@ -259,7 +359,7 @@ function ProducerBlockSettings({block,seriesOptions,people,onSave}){
     <label>Описание<textarea value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></label>
     <label>Ветка<select value={draft.seriesId} onChange={e=>setDraft({...draft,seriesId:e.target.value})}><option value="">Общий блок проекта</option>{seriesOptions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     <label>Ответственный<select value={draft.ownerPersonId} onChange={e=>setDraft({...draft,ownerPersonId:e.target.value})} required>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-    <div className="producer-form-row"><label>Начало<input type="date" value={draft.startDate} onChange={e=>setDraft({...draft,startDate:e.target.value})}/></label><label>Срок<input type="date" value={draft.deadline} onChange={e=>setDraft({...draft,deadline:e.target.value})}/></label></div>
+    <div className="producer-form-row"><label>Начало<ProducerDateField label="Дата начала блока" value={draft.startDate} onChange={value=>setDraft({...draft,startDate:value})}/></label><label>Срок<ProducerDateField label="Срок блока" value={draft.deadline} onChange={value=>setDraft({...draft,deadline:value})}/></label></div>
     <label>Статус<select value={draft.status} onChange={e=>setDraft({...draft,status:e.target.value})}><option value="planned">Запланировано</option><option value="active">В работе</option><option value="paused">Пауза</option><option value="done">Готово</option></select></label>
     <button className="producer-primary" disabled={busy}>{busy?"Сохраняю…":"Сохранить параметры"}</button>
   </form></details>;
@@ -304,7 +404,7 @@ function ProducerApprovals({approvals,tasks,canDecide,onCreate,onDecision}){
     <div className="producer-approval-list">{approvals.length?approvals.map(item=><ProducerApprovalItem key={item.id} approval={item} tasks={tasks} canDecide={canDecide} onDecision={onDecision}/>):<p className="producer-approval-empty">Согласований в этом блоке пока нет.</p>}</div>
     {!open?<button className="producer-approval-create-open" onClick={()=>setOpen(true)}>＋ Запросить согласование</button>:<form className="producer-approval-create" onSubmit={submit}>
       <label>Что согласовать<input autoFocus value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} placeholder="Например, финальный сценарий" required/></label>
-      <div className="producer-form-row"><label>Связанная задача<select value={draft.taskId} onChange={e=>setDraft({...draft,taskId:e.target.value})}><option value="">Весь блок</option>{tasks.map(task=><option key={task.id} value={task.id}>{task.title}</option>)}</select></label><label>Срок решения<input type="date" value={draft.dueDate} onChange={e=>setDraft({...draft,dueDate:e.target.value})}/></label></div>
+      <div className="producer-form-row"><label>Связанная задача<select value={draft.taskId} onChange={e=>setDraft({...draft,taskId:e.target.value})}><option value="">Весь блок</option>{tasks.map(task=><option key={task.id} value={task.id}>{task.title}</option>)}</select></label><label>Срок решения<ProducerDateField label="Срок решения" value={draft.dueDate} onChange={value=>setDraft({...draft,dueDate:value})}/></label></div>
       <label className="producer-approval-required"><input type="checkbox" checked={draft.required} onChange={e=>setDraft({...draft,required:e.target.checked})}/> Обязательное согласование влияет на предупреждения</label>
       <div className="producer-task-editor-actions"><button type="button" onClick={()=>setOpen(false)}>Отмена</button><button className="producer-primary" disabled={busy}>{busy?"Сохраняю…":"Создать запрос"}</button></div>
     </form>}
@@ -380,14 +480,18 @@ function ProducerWorkspace({user,data,onExit}){
   const [refreshKey,setRefreshKey]=useState(0);
   useEffect(()=>{const update=()=>setScreen(producerInitialScreen());window.addEventListener("hashchange",update);return()=>window.removeEventListener("hashchange",update);},[]);
   function go(type,id){
-    const next=type==="dashboard"?{type:"dashboard",id:""}:{type,id};
+    const staticSection=["dashboard","projects","calendar","history"].includes(type);
+    const next={type,id:staticSection?"":id};
     setScreen(next);
-    window.location.hash=type==="dashboard"?"producer":`producer/${type}/${encodeURIComponent(id)}`;
+    window.location.hash=type==="dashboard"?"producer":staticSection?`producer/${type}`:`producer/${type}/${encodeURIComponent(id)}`;
     window.scrollTo(0,0);
   }
   function toast(message){setToastMessage(message);setRefreshKey(value=>value+1);window.clearTimeout(ProducerWorkspace.toastTimer);ProducerWorkspace.toastTimer=window.setTimeout(()=>setToastMessage(""),2600);}
-  return <ProducerShell user={user} onHome={()=>go("dashboard")} onExit={onExit}>
-    {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey}/>} 
+  return <ProducerShell user={user} onHome={()=>go("dashboard")} onExit={onExit} screen={screen} go={go}>
+    {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey} user={user}/>}
+    {screen.type==="projects"&&<ProducerProjectsPage go={go} refreshKey={refreshKey}/>}
+    {screen.type==="calendar"&&<ProducerCalendarPage go={go} refreshKey={refreshKey}/>}
+    {screen.type==="history"&&<ProducerHistoryPage refreshKey={refreshKey}/>}
     {screen.type==="project"&&<ProducerProjectMap projectId={screen.id} people={data.people||[]} go={go} toast={toast}/>} 
     {screen.type==="block"&&<ProducerBlockPage blockId={screen.id} go={go} toast={toast}/>} 
     <ProducerToast message={toastMessage}/>

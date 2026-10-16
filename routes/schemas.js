@@ -115,7 +115,9 @@ var absenceSchema=z.object({id:z.string().min(1),personId:z.string().default('')
 var bulkSchema=z.object({projects:z.array(projectSchema).optional(),series:z.array(seriesSchema).optional(),tasks:z.array(taskSchema).optional(),people:z.array(personSchema).optional(),roles:z.array(roleSchema).optional(),stages:z.array(stageSchema).optional(),stageGroups:z.array(z.object({id:z.string().min(1),label:z.string().min(1),order:z.number().int()})).optional(),holidays:z.array(z.string().refine(validDay)).optional(),achievements:z.array(achievementSchema).optional(),personAbsences:z.array(absenceSchema).optional(),templates:z.array(z.any()).optional(),changelog:z.array(z.any()).max(200).optional(),_clientId:z.string().optional(),_revision:z.number().int().min(0).optional()});
 
 var isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(function(value) {
-  return !Number.isNaN(Date.parse(value + 'T12:00:00Z'));
+  var parts = value.split('-').map(Number);
+  var date = new Date(Date.UTC(parts[0],parts[1]-1,parts[2],12));
+  return date.getUTCFullYear()===parts[0] && date.getUTCMonth()+1===parts[1] && date.getUTCDate()===parts[2];
 }, 'Invalid date');
 var producerBlockSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -139,6 +141,7 @@ var producerBlockUpdateSchema = z.object({
 var producerGroupSchema = z.object({name:z.string().trim().min(1).max(120)});
 var producerTaskSchema = z.object({
   title: z.string().trim().min(1).max(300),
+  internalComment: z.string().trim().max(4000).default(''),
   groupId: z.string().trim().min(1).nullable().optional(),
   assigneePersonId: z.string().trim().min(1),
   responsiblePersonId: z.string().trim().min(1).nullable().optional(),
@@ -146,6 +149,7 @@ var producerTaskSchema = z.object({
 });
 var producerTaskUpdateSchema = z.object({
   title: z.string().trim().min(1).max(300).optional(),
+  internalComment: z.string().trim().max(4000).optional(),
   groupId: z.string().trim().min(1).nullable().optional(),
   assigneePersonId: z.string().trim().min(1).optional(),
   responsiblePersonId: z.string().trim().min(1).nullable().optional(),

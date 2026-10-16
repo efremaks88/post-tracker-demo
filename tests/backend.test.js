@@ -109,7 +109,7 @@ test('route permissions keep user management and directories at their previous b
 });
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
-  assert.equal(first,15);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+  assert.equal(first,16);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
 });
 
 test('producer vertical slice persists blocks, groups, assignments, completion and audit',async()=>{
@@ -155,11 +155,11 @@ test('D1 edits tasks and blocks and removes groups without losing their tasks',a
   const firstGroup=(await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Сценарий'})).body.id;
   const secondGroup=(await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Документы'})).body.id;
   const taskId=(await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
-    title:'Черновая задача',groupId:firstGroup,assigneePersonId:'producer-a',
+    title:'Черновая задача',internalComment:'Первая внутренняя заметка',groupId:firstGroup,assigneePersonId:'producer-a',
   })).body.id;
 
   assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{
-    title:'Подготовить договор',groupId:secondGroup,assigneePersonId:'producer-b',responsiblePersonId:'producer-a',deadline:'2026-10-19',
+    title:'Подготовить договор',internalComment:'Юристы ждут приложение № 2',groupId:secondGroup,assigneePersonId:'producer-b',responsiblePersonId:'producer-a',deadline:'2026-10-19',
   })).status,200);
   assert.equal((await request('/api/producer/groups/'+secondGroup,'PATCH',{name:'Договоры'})).status,200);
   assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{groupId:firstGroup})).status,200);
@@ -174,6 +174,7 @@ test('D1 edits tasks and blocks and removes groups without losing their tasks',a
   assert.equal(loaded.block.startDate,'2026-10-17');assert.equal(loaded.block.deadline,'2026-10-21');
   assert.deepEqual(loaded.groups.map(item=>item.name),['Договоры']);
   assert.equal(loaded.tasks[0].title,'Подготовить договор');assert.equal(loaded.tasks[0].groupId,null);
+  assert.equal(loaded.tasks[0].internalComment,'Юристы ждут приложение № 2');
   assert.equal(loaded.tasks[0].assigneeName,'Продюсер Б');assert.equal(loaded.tasks[0].responsibleName,'Продюсер А');
   assert.equal(loaded.tasks[0].deadline,'2026-10-19');
 
@@ -187,12 +188,15 @@ test('D1 edits tasks and blocks and removes groups without losing their tasks',a
   assert.ok(loaded.history.some(event=>event.action==='move'&&event.entity==='productionTask'));
   assert.ok(loaded.history.some(event=>event.action==='complete'));
   assert.ok(loaded.history.some(event=>event.action==='restore'));
+  assert.ok(loaded.history.some(event=>event.entity==='productionTask'&&event.changes.some(change=>change.field==='internal_comment'&&change.after==='Юристы ждут приложение № 2')));
 
   const otherBlock=(await request('/api/producer/projects/other/blocks','POST',{name:'Чужой',ownerPersonId:'producer-a'})).body.id;
   const foreignGroup=(await request('/api/producer/blocks/'+otherBlock+'/groups','POST',{name:'Чужая группа'})).body.id;
   assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{groupId:foreignGroup})).status,400);
   const auditBefore=(await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n;
   assert.equal((await request('/api/producer/blocks/'+blockId,'PATCH',{startDate:'2026-10-30',deadline:'2026-10-20'})).status,400);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n,auditBefore);
+  assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{deadline:'2026-02-30'})).status,400);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n,auditBefore);
 });
 test('D2 approvals use decision rights, drive warnings and retain an audited decision trail',async()=>{
