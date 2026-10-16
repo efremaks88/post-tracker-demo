@@ -18735,12 +18735,16 @@ function ProducerProjectCard(_ref130) {
   }), React.createElement("div", {
     className: "producer-project-preview-meta"
   }, React.createElement("span", {
+    className: "producer-project-team"
+  }, React.createElement("span", {
     className: "producer-avatar-stack"
   }, (project.team || []).map(person => React.createElement(ProducerAvatar, {
     key: person.id,
     person: person,
     size: "tiny"
-  }))), React.createElement("span", null, project.totalTasks, " \u0437\u0430\u0434\u0430\u0447"), React.createElement("span", null, "\u0434\u043E ", producerDate(project.nextDeadline)))), expanded && React.createElement("div", {
+  }))), React.createElement("small", null, "\u041A\u043E\u043C\u0430\u043D\u0434\u0430: ", (project.team || []).length)), React.createElement("span", {
+    className: "producer-project-deadline"
+  }, React.createElement("small", null, PRODUCER_STATUS_LABELS[project.status] || project.status || "В работе"), React.createElement("strong", null, "\u0434\u043E ", producerDate(project.nextDeadline))))), expanded && React.createElement("div", {
     className: "producer-project-preview-detail"
   }, React.createElement("span", null, project.completedTasks, " \u0438\u0437 ", project.totalTasks, " \u0437\u0430\u0434\u0430\u0447 \u0433\u043E\u0442\u043E\u0432\u044B"), React.createElement("button", {
     onClick: () => go("project", project.id)
@@ -18834,7 +18838,9 @@ function ProducerDashboard(_ref131) {
     onClick: () => go("block", item.blockId)
   }, React.createElement("span", {
     className: "producer-paper-check"
-  }, "\u2713"), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName)), React.createElement("time", null, producerDate(item.deadline)))) : React.createElement("p", null, "\u041D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0437\u0430\u0434\u0430\u0447 \u043D\u0435\u0442."))), React.createElement("article", {
+  }, "\u2713"), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName, " \xB7 ", item.blockName), item.internalComment && React.createElement("em", {
+    className: "producer-list-comment"
+  }, "\uD83D\uDCAC ", item.internalComment)), React.createElement("time", null, producerDate(item.deadline)))) : React.createElement("p", null, "\u041D\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0437\u0430\u0434\u0430\u0447 \u043D\u0435\u0442."))), React.createElement("article", {
     className: "producer-clean-list producer-deadline-list"
   }, React.createElement("header", null, React.createElement("h2", null, "\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u0440\u043E\u043A\u0438"), React.createElement("button", {
     onClick: () => go("calendar")
@@ -18845,7 +18851,7 @@ function ProducerDashboard(_ref131) {
     style: {
       background: item.projectColor
     }
-  }), React.createElement("time", null, producerDate(item.deadline)), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName)))) : React.createElement("p", null, "\u0412 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u0432\u0435 \u043D\u0435\u0434\u0435\u043B\u0438 \u0441\u0440\u043E\u043A\u043E\u0432 \u043D\u0435\u0442."))), React.createElement("article", {
+  }), React.createElement("time", null, producerDate(item.deadline)), React.createElement("span", null, React.createElement("strong", null, item.title), React.createElement("small", null, item.projectName, " \xB7 ", item.blockName)))) : React.createElement("p", null, "\u0412 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0434\u0432\u0435 \u043D\u0435\u0434\u0435\u043B\u0438 \u0441\u0440\u043E\u043A\u043E\u0432 \u043D\u0435\u0442."))), React.createElement("article", {
     className: "producer-attention-summary"
   }, React.createElement("header", null, React.createElement("span", null, "!"), React.createElement("div", null, React.createElement("h2", null, "\u0422\u0440\u0435\u0431\u0443\u0435\u0442 \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F"), React.createElement("p", null, attention.length, " \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0439 \u0432 ", attentionGroups.length, " \u043F\u0440\u043E\u0435\u043A\u0442\u0430\u0445"))), React.createElement("div", null, attentionGroups.length ? attentionGroups.slice(0, 3).map(group => {
     const open = openAttention === group.id;
@@ -18862,7 +18868,7 @@ function ProducerDashboard(_ref131) {
       className: "producer-attention-item",
       key: item.id,
       onClick: () => go("block", item.blockId)
-    }, React.createElement("span", null, React.createElement("em", null, item.reason), React.createElement("strong", null, item.title)), React.createElement("time", null, producerRelativeDue(item.deadline), " \u2192"))));
+    }, React.createElement("span", null, React.createElement("em", null, item.reason), React.createElement("strong", null, item.title), (item.detail || item.blockName) && React.createElement("small", null, item.detail || item.blockName)), React.createElement("time", null, producerRelativeDue(item.deadline), " \u2192"))));
   }) : React.createElement("p", null, "\u0421\u0440\u043E\u0447\u043D\u044B\u0445 \u043F\u0440\u0435\u043F\u044F\u0442\u0441\u0442\u0432\u0438\u0439 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0442.")))));
 }
 function ProducerProjectsPage(_ref134) {

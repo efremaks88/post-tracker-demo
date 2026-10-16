@@ -151,7 +151,10 @@ function ProducerProjectCard({project,go}){
     <div className="producer-project-preview-copy">
       <strong>{project.name}</strong><small>{project.description||"Проект без описания"}</small>
       <ProducerProgress done={project.completedTasks} total={project.totalTasks}/>
-      <div className="producer-project-preview-meta"><span className="producer-avatar-stack">{(project.team||[]).map(person=><ProducerAvatar key={person.id} person={person} size="tiny"/>)}</span><span>{project.totalTasks} задач</span><span>до {producerDate(project.nextDeadline)}</span></div>
+      <div className="producer-project-preview-meta">
+        <span className="producer-project-team"><span className="producer-avatar-stack">{(project.team||[]).map(person=><ProducerAvatar key={person.id} person={person} size="tiny"/>)}</span><small>Команда: {(project.team||[]).length}</small></span>
+        <span className="producer-project-deadline"><small>{PRODUCER_STATUS_LABELS[project.status]||project.status||"В работе"}</small><strong>до {producerDate(project.nextDeadline)}</strong></span>
+      </div>
     </div>
     {expanded&&<div className="producer-project-preview-detail"><span>{project.completedTasks} из {project.totalTasks} задач готовы</span><button onClick={()=>go("project",project.id)}>Открыть карту проекта →</button></div>}
   </article>;
@@ -183,20 +186,20 @@ function ProducerDashboard({go,refreshKey,user}){
       <article className="producer-clean-list producer-today-list">
         <header><h2>Мои задачи сегодня</h2><b>{todayTasks.length}</b></header>
         <div>{todayTasks.length?todayTasks.map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
-          <span className="producer-paper-check">✓</span><span><strong>{item.title}</strong><small>{item.projectName}</small></span><time>{producerDate(item.deadline)}</time>
+          <span className="producer-paper-check">✓</span><span><strong>{item.title}</strong><small>{item.projectName} · {item.blockName}</small>{item.internalComment&&<em className="producer-list-comment">💬 {item.internalComment}</em>}</span><time>{producerDate(item.deadline)}</time>
         </button>):<p>На сегодня задач нет.</p>}</div>
       </article>
       <article className="producer-clean-list producer-deadline-list">
         <header><h2>Ближайшие сроки</h2><button onClick={()=>go("calendar")}>Календарь →</button></header>
         <div>{result.deadlines.length?result.deadlines.slice(0,5).map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
-          <i style={{background:item.projectColor}}/><time>{producerDate(item.deadline)}</time><span><strong>{item.title}</strong><small>{item.projectName}</small></span>
+          <i style={{background:item.projectColor}}/><time>{producerDate(item.deadline)}</time><span><strong>{item.title}</strong><small>{item.projectName} · {item.blockName}</small></span>
         </button>):<p>В ближайшие две недели сроков нет.</p>}</div>
       </article>
       <article className="producer-attention-summary">
         <header><span>!</span><div><h2>Требует внимания</h2><p>{attention.length} ситуаций в {attentionGroups.length} проектах</p></div></header>
         <div>{attentionGroups.length?attentionGroups.slice(0,3).map(group=>{const open=openAttention===group.id;const visible=open?group.items:group.items.slice(0,1);return <section key={group.id} style={{"--project-color":group.color}}>
           <button className="producer-attention-project" onClick={()=>setOpenAttention(open?"":group.id)}><i/><strong>{group.name}</strong><b>{group.items.length}</b><span>{open?"−":"+"}</span></button>
-          {visible.map(item=><button className="producer-attention-item" key={item.id} onClick={()=>go("block",item.blockId)}><span><em>{item.reason}</em><strong>{item.title}</strong></span><time>{producerRelativeDue(item.deadline)} →</time></button>)}
+          {visible.map(item=><button className="producer-attention-item" key={item.id} onClick={()=>go("block",item.blockId)}><span><em>{item.reason}</em><strong>{item.title}</strong>{(item.detail||item.blockName)&&<small>{item.detail||item.blockName}</small>}</span><time>{producerRelativeDue(item.deadline)} →</time></button>)}
         </section>}):<p>Срочных препятствий сейчас нет.</p>}</div>
       </article>
     </section>
