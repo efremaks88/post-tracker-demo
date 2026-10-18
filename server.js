@@ -239,10 +239,10 @@ app.use(function(req, res, next) {
 
 app.get('/api/runtime', function(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.11.0' : '' });
+  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.12.0' : '' });
 });
 app.get('/runtime-config.js', function(req, res) {
-  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.11.0' : '' };
+  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.12.0' : '' };
   res.setHeader('Cache-Control', 'no-store');
   res.type('application/javascript').send('window.__TRACKER_RUNTIME__=' + JSON.stringify(runtime) + ';');
 });

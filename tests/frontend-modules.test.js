@@ -51,6 +51,8 @@ test('producer dashboard exposes the personal hierarchy and direct warning navig
   assert.ok(source.includes('function ProducerCalendarPage('));
   assert.ok(source.includes('function ProducerHistoryPage('));
   assert.ok(source.includes('function ProducerTeamPage('));
+  assert.ok(source.includes('Показать, чем занят'));
+  assert.ok(source.includes('aria-expanded={expanded}'));
   assert.ok(source.includes('function ProducerPersonPage('));
   assert.ok(source.includes('function ProducerAnalyticsPage('));
   assert.ok(source.includes('Фильтр истории по автору'));

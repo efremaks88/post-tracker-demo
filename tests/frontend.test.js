@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.11.0'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.12.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -140,7 +140,7 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.11.0'));
+  assert.ok(mobile.includes('DEV · v0.12.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
 });

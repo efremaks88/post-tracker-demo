@@ -544,7 +544,7 @@ function ProducerCurrentItem({item,go}){
 }
 
 function ProducerTeamPage({go,refreshKey}){
-  const [result,setResult]=useState(null);const [error,setError]=useState("");const [search,setSearch]=useState("");
+  const [result,setResult]=useState(null);const [error,setError]=useState("");const [search,setSearch]=useState("");const [expandedPerson,setExpandedPerson]=useState("");
   useEffect(()=>{let alive=true;producerRequest("/api/producer/team").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Собираю загрузку команды…</div></main>;
@@ -552,13 +552,13 @@ function ProducerTeamPage({go,refreshKey}){
   return <main className="producer-main producer-team-page">
     <header className="producer-page-heading"><div><span className="producer-eyebrow">КОМАНДА И ТЕКУЩАЯ РАБОТА</span><h1>Кто чем занят</h1><p>Задачи, ближайшие смены и ответственность за блоки на одном экране.</p></div><label className="producer-team-search">Найти сотрудника<input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Имя, роль или проект"/></label></header>
     <section className="producer-load-legend"><span className="free">Есть запас</span><span className="balanced">Ровная загрузка</span><span className="busy">Высокая</span><span className="overloaded">Перегруз</span><p>{result.methodNote}</p></section>
-    <div className="producer-team-grid">{people.map(person=><article key={person.id} className={`producer-team-card ${person.workloadLevel}`} onDoubleClick={()=>go("person",person.id)}>
+    <div className="producer-team-grid">{people.map(person=>{const expanded=expandedPerson===person.id;return <article key={person.id} className={`producer-team-card ${person.workloadLevel}${expanded?" expanded":""}`} onDoubleClick={()=>go("person",person.id)}>
       <header><ProducerAvatar person={person} size="profile"/><div><h2>{person.name}</h2><p>{(person.roles||[]).join(" · ")||"Роль не указана"}</p></div><button onClick={()=>go("person",person.id)}>Открыть →</button></header>
-      <p className="producer-team-headline">{person.headline||"Сотрудник пока не добавил описание своей роли."}</p><ProducerWorkload person={person}/>
+      <ProducerWorkload person={person}/>
       <div className="producer-team-numbers"><span><b>{person.openTasks}</b> активных задач</span><span><b>{person.shiftHours7}</b> ч смен</span><span className={person.overdueTasks?"danger":""}><b>{person.overdueTasks}</b> просрочено</span></div>
-      <div className="producer-team-now"><strong>Сейчас в работе</strong>{person.currentItems.length?person.currentItems.slice(0,3).map(item=><ProducerCurrentItem key={item.kind+item.id} item={item} go={go}/>):<p>Активных задач и ближайших смен нет.</p>}</div>
-      <small className="producer-double-click-hint">Двойной щелчок открывает карточку сотрудника</small>
-    </article>)}</div>
+      <button className="producer-team-toggle" aria-expanded={expanded} onClick={()=>setExpandedPerson(expanded?"":person.id)}>{expanded?"Свернуть":"Показать, чем занят"}<span>{expanded?"−":"+"}</span></button>
+      {expanded&&<div className="producer-team-expanded"><p className="producer-team-headline">{person.headline||"Сотрудник пока не добавил описание своей роли."}</p><div className="producer-team-now"><strong>Сейчас в работе</strong>{person.currentItems.length?person.currentItems.map(item=><ProducerCurrentItem key={item.kind+item.id} item={item} go={go}/>):<p>Активных задач и ближайших смен нет.</p>}</div><small className="producer-double-click-hint">Двойной щелчок открывает полную карточку сотрудника</small></div>}
+    </article>;})}</div>
   </main>;
 }
 

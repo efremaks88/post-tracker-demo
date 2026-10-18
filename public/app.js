@@ -20587,6 +20587,10 @@ function ProducerTeamPage(_ref155) {
     _useState298 = _slicedToArray(_useState297, 2),
     search = _useState298[0],
     setSearch = _useState298[1];
+  const _useState299 = useState(""),
+    _useState300 = _slicedToArray(_useState299, 2),
+    expandedPerson = _useState300[0],
+    setExpandedPerson = _useState300[1];
   useEffect(() => {
     let alive = true;
     producerRequest("/api/producer/team").then(data => alive && setResult(data)).catch(e => alive && setError(e.message));
@@ -20630,54 +20634,63 @@ function ProducerTeamPage(_ref155) {
     className: "overloaded"
   }, "\u041F\u0435\u0440\u0435\u0433\u0440\u0443\u0437"), React.createElement("p", null, result.methodNote)), React.createElement("div", {
     className: "producer-team-grid"
-  }, people.map(person => React.createElement("article", {
-    key: person.id,
-    className: `producer-team-card ${person.workloadLevel}`,
-    onDoubleClick: () => go("person", person.id)
-  }, React.createElement("header", null, React.createElement(ProducerAvatar, {
-    person: person,
-    size: "profile"
-  }), React.createElement("div", null, React.createElement("h2", null, person.name), React.createElement("p", null, (person.roles || []).join(" · ") || "Роль не указана")), React.createElement("button", {
-    onClick: () => go("person", person.id)
-  }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u2192")), React.createElement("p", {
-    className: "producer-team-headline"
-  }, person.headline || "Сотрудник пока не добавил описание своей роли."), React.createElement(ProducerWorkload, {
-    person: person
-  }), React.createElement("div", {
-    className: "producer-team-numbers"
-  }, React.createElement("span", null, React.createElement("b", null, person.openTasks), " \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447"), React.createElement("span", null, React.createElement("b", null, person.shiftHours7), " \u0447 \u0441\u043C\u0435\u043D"), React.createElement("span", {
-    className: person.overdueTasks ? "danger" : ""
-  }, React.createElement("b", null, person.overdueTasks), " \u043F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E")), React.createElement("div", {
-    className: "producer-team-now"
-  }, React.createElement("strong", null, "\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0440\u0430\u0431\u043E\u0442\u0435"), person.currentItems.length ? person.currentItems.slice(0, 3).map(item => React.createElement(ProducerCurrentItem, {
-    key: item.kind + item.id,
-    item: item,
-    go: go
-  })) : React.createElement("p", null, "\u0410\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447 \u0438 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0445 \u0441\u043C\u0435\u043D \u043D\u0435\u0442.")), React.createElement("small", {
-    className: "producer-double-click-hint"
-  }, "\u0414\u0432\u043E\u0439\u043D\u043E\u0439 \u0449\u0435\u043B\u0447\u043E\u043A \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0430")))));
+  }, people.map(person => {
+    const expanded = expandedPerson === person.id;
+    return React.createElement("article", {
+      key: person.id,
+      className: `producer-team-card ${person.workloadLevel}${expanded ? " expanded" : ""}`,
+      onDoubleClick: () => go("person", person.id)
+    }, React.createElement("header", null, React.createElement(ProducerAvatar, {
+      person: person,
+      size: "profile"
+    }), React.createElement("div", null, React.createElement("h2", null, person.name), React.createElement("p", null, (person.roles || []).join(" · ") || "Роль не указана")), React.createElement("button", {
+      onClick: () => go("person", person.id)
+    }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u2192")), React.createElement(ProducerWorkload, {
+      person: person
+    }), React.createElement("div", {
+      className: "producer-team-numbers"
+    }, React.createElement("span", null, React.createElement("b", null, person.openTasks), " \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447"), React.createElement("span", null, React.createElement("b", null, person.shiftHours7), " \u0447 \u0441\u043C\u0435\u043D"), React.createElement("span", {
+      className: person.overdueTasks ? "danger" : ""
+    }, React.createElement("b", null, person.overdueTasks), " \u043F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E")), React.createElement("button", {
+      className: "producer-team-toggle",
+      "aria-expanded": expanded,
+      onClick: () => setExpandedPerson(expanded ? "" : person.id)
+    }, expanded ? "Свернуть" : "Показать, чем занят", React.createElement("span", null, expanded ? "−" : "+")), expanded && React.createElement("div", {
+      className: "producer-team-expanded"
+    }, React.createElement("p", {
+      className: "producer-team-headline"
+    }, person.headline || "Сотрудник пока не добавил описание своей роли."), React.createElement("div", {
+      className: "producer-team-now"
+    }, React.createElement("strong", null, "\u0421\u0435\u0439\u0447\u0430\u0441 \u0432 \u0440\u0430\u0431\u043E\u0442\u0435"), person.currentItems.length ? person.currentItems.map(item => React.createElement(ProducerCurrentItem, {
+      key: item.kind + item.id,
+      item: item,
+      go: go
+    })) : React.createElement("p", null, "\u0410\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0437\u0430\u0434\u0430\u0447 \u0438 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0445 \u0441\u043C\u0435\u043D \u043D\u0435\u0442.")), React.createElement("small", {
+      className: "producer-double-click-hint"
+    }, "\u0414\u0432\u043E\u0439\u043D\u043E\u0439 \u0449\u0435\u043B\u0447\u043E\u043A \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u043F\u043E\u043B\u043D\u0443\u044E \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A\u0430")));
+  })));
 }
 function ProducerProfileEditor(_ref156) {
   let person = _ref156.person,
     onSaved = _ref156.onSaved,
     onCancel = _ref156.onCancel;
-  const _useState299 = useState({
+  const _useState301 = useState({
       headline: person.headline || "",
       achievements: (person.achievements || []).map(item => ({
         ...item
       }))
     }),
-    _useState300 = _slicedToArray(_useState299, 2),
-    draft = _useState300[0],
-    setDraft = _useState300[1];
-  const _useState301 = useState(false),
     _useState302 = _slicedToArray(_useState301, 2),
-    busy = _useState302[0],
-    setBusy = _useState302[1];
-  const _useState303 = useState(""),
+    draft = _useState302[0],
+    setDraft = _useState302[1];
+  const _useState303 = useState(false),
     _useState304 = _slicedToArray(_useState303, 2),
-    error = _useState304[0],
-    setError = _useState304[1];
+    busy = _useState304[0],
+    setBusy = _useState304[1];
+  const _useState305 = useState(""),
+    _useState306 = _slicedToArray(_useState305, 2),
+    error = _useState306[0],
+    setError = _useState306[1];
   function change(index, key, value) {
     setDraft(current => ({
       ...current,
@@ -20774,22 +20787,22 @@ function ProducerPersonPage(_ref157) {
     go = _ref157.go,
     refreshKey = _ref157.refreshKey,
     toast = _ref157.toast;
-  const _useState305 = useState(null),
-    _useState306 = _slicedToArray(_useState305, 2),
-    person = _useState306[0],
-    setPerson = _useState306[1];
-  const _useState307 = useState(""),
+  const _useState307 = useState(null),
     _useState308 = _slicedToArray(_useState307, 2),
-    error = _useState308[0],
-    setError = _useState308[1];
-  const _useState309 = useState(false),
+    person = _useState308[0],
+    setPerson = _useState308[1];
+  const _useState309 = useState(""),
     _useState310 = _slicedToArray(_useState309, 2),
-    editing = _useState310[0],
-    setEditing = _useState310[1];
-  const _useState311 = useState(0),
+    error = _useState310[0],
+    setError = _useState310[1];
+  const _useState311 = useState(false),
     _useState312 = _slicedToArray(_useState311, 2),
-    reload = _useState312[0],
-    setReload = _useState312[1];
+    editing = _useState312[0],
+    setEditing = _useState312[1];
+  const _useState313 = useState(0),
+    _useState314 = _slicedToArray(_useState313, 2),
+    reload = _useState314[0],
+    setReload = _useState314[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -20872,14 +20885,14 @@ function ProducerPersonPage(_ref157) {
 function ProducerAnalyticsPage(_ref158) {
   let go = _ref158.go,
     refreshKey = _ref158.refreshKey;
-  const _useState313 = useState(null),
-    _useState314 = _slicedToArray(_useState313, 2),
-    result = _useState314[0],
-    setResult = _useState314[1];
-  const _useState315 = useState(""),
+  const _useState315 = useState(null),
     _useState316 = _slicedToArray(_useState315, 2),
-    error = _useState316[0],
-    setError = _useState316[1];
+    result = _useState316[0],
+    setResult = _useState316[1];
+  const _useState317 = useState(""),
+    _useState318 = _slicedToArray(_useState317, 2),
+    error = _useState318[0],
+    setError = _useState318[1];
   useEffect(() => {
     let alive = true;
     producerRequest("/api/producer/analytics").then(data => alive && setResult(data)).catch(e => alive && setError(e.message));
@@ -20938,18 +20951,18 @@ function ProducerWorkspace(_ref159) {
   let user = _ref159.user,
     data = _ref159.data,
     onExit = _ref159.onExit;
-  const _useState317 = useState(() => producerInitialScreen()),
-    _useState318 = _slicedToArray(_useState317, 2),
-    screen = _useState318[0],
-    setScreen = _useState318[1];
-  const _useState319 = useState(""),
+  const _useState319 = useState(() => producerInitialScreen()),
     _useState320 = _slicedToArray(_useState319, 2),
-    toastMessage = _useState320[0],
-    setToastMessage = _useState320[1];
-  const _useState321 = useState(0),
+    screen = _useState320[0],
+    setScreen = _useState320[1];
+  const _useState321 = useState(""),
     _useState322 = _slicedToArray(_useState321, 2),
-    refreshKey = _useState322[0],
-    setRefreshKey = _useState322[1];
+    toastMessage = _useState322[0],
+    setToastMessage = _useState322[1];
+  const _useState323 = useState(0),
+    _useState324 = _slicedToArray(_useState323, 2),
+    refreshKey = _useState324[0],
+    setRefreshKey = _useState324[1];
   useEffect(() => {
     const update = () => setScreen(producerInitialScreen());
     window.addEventListener("hashchange", update);
@@ -21015,51 +21028,51 @@ function ProducerWorkspace(_ref159) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState323 = useState(null),
-    _useState324 = _slicedToArray(_useState323, 2),
-    rawData = _useState324[0],
-    setRawData = _useState324[1];
-  const _useState325 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
+  const _useState325 = useState(null),
     _useState326 = _slicedToArray(_useState325, 2),
-    workspace = _useState326[0],
-    setWorkspace = _useState326[1];
-  const _useState327 = useState("today"),
+    rawData = _useState326[0],
+    setRawData = _useState326[1];
+  const _useState327 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
     _useState328 = _slicedToArray(_useState327, 2),
-    view = _useState328[0],
-    setView = _useState328[1];
-  const _useState329 = useState(() => parseHash()),
+    workspace = _useState328[0],
+    setWorkspace = _useState328[1];
+  const _useState329 = useState("today"),
     _useState330 = _slicedToArray(_useState329, 2),
-    navState = _useState330[0],
-    setNavState = _useState330[1];
-  const _useState331 = useState("ok"),
+    view = _useState330[0],
+    setView = _useState330[1];
+  const _useState331 = useState(() => parseHash()),
     _useState332 = _slicedToArray(_useState331, 2),
-    syncState = _useState332[0],
-    setSyncState = _useState332[1];
-  const _useState333 = useState(""),
+    navState = _useState332[0],
+    setNavState = _useState332[1];
+  const _useState333 = useState("ok"),
     _useState334 = _slicedToArray(_useState333, 2),
-    syncError = _useState334[0],
-    setSyncError = _useState334[1];
-  const _useState335 = useState(false),
+    syncState = _useState334[0],
+    setSyncState = _useState334[1];
+  const _useState335 = useState(""),
     _useState336 = _slicedToArray(_useState335, 2),
-    dayShiftsModal = _useState336[0],
-    setDayShiftsModal = _useState336[1];
-  const _useState337 = useState(null),
+    syncError = _useState336[0],
+    setSyncError = _useState336[1];
+  const _useState337 = useState(false),
     _useState338 = _slicedToArray(_useState337, 2),
-    ganttDay = _useState338[0],
-    setGanttDay = _useState338[1];
-  const _useState339 = useState(false),
+    dayShiftsModal = _useState338[0],
+    setDayShiftsModal = _useState338[1];
+  const _useState339 = useState(null),
     _useState340 = _slicedToArray(_useState339, 2),
-    cmdPaletteOpen = _useState340[0],
-    setCmdPaletteOpen = _useState340[1];
-  const isMobile = useIsMobile(760);
-  const _useState341 = useState(null),
+    ganttDay = _useState340[0],
+    setGanttDay = _useState340[1];
+  const _useState341 = useState(false),
     _useState342 = _slicedToArray(_useState341, 2),
-    user = _useState342[0],
-    setUser = _useState342[1];
+    cmdPaletteOpen = _useState342[0],
+    setCmdPaletteOpen = _useState342[1];
+  const isMobile = useIsMobile(760);
   const _useState343 = useState(null),
     _useState344 = _slicedToArray(_useState343, 2),
-    loginError = _useState344[0],
-    setLoginError = _useState344[1];
+    user = _useState344[0],
+    setUser = _useState344[1];
+  const _useState345 = useState(null),
+    _useState346 = _slicedToArray(_useState345, 2),
+    loginError = _useState346[0],
+    setLoginError = _useState346[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
