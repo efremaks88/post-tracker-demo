@@ -17,6 +17,7 @@ const { createPolicy } = require("./lib/policy");
 const createSSE    = require("./lib/sse");
 const registerDataRoutes = require("./routes/data");
 const { captureAuditState, recordStateChanges } = require("./lib/audit");
+const { acquireLocalDataLock } = require('./lib/local-lock');
 
 const app = express();
 app.disable("x-powered-by");
@@ -113,6 +114,16 @@ const SINGLE_SESSION_PER_USER = process.env.SINGLE_SESSION_PER_USER === "true";
 
 // Initialize the production PostgreSQL pool or the isolated local demo store.
 var localDemoModule = null;
+var releaseLocalDataLock = null;
+if (LOCAL_DEMO_MODE) {
+  try {
+    releaseLocalDataLock = acquireLocalDataLock(path.join(__dirname,'local-data','pglite.lock'));
+    process.on('exit', function() { if (releaseLocalDataLock) releaseLocalDataLock(); });
+  } catch (error) {
+    console.error('[LOCAL] ' + error.message);
+    process.exit(1);
+  }
+}
 const pool = LOCAL_DEMO_MODE ? (function() {
   localDemoModule = require('./lib/local-demo');
   return localDemoModule.createLocalPool(path.join(__dirname, 'local-data', 'pglite'));
@@ -228,10 +239,10 @@ app.use(function(req, res, next) {
 
 app.get('/api/runtime', function(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.10.0' : '' });
+  res.json({ mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.11.0' : '' });
 });
 app.get('/runtime-config.js', function(req, res) {
-  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.10.0' : '' };
+  const runtime = { mode: LOCAL_DEMO_MODE ? 'local-demo' : 'production', label: LOCAL_DEMO_MODE ? 'DEV · v0.11.0' : '' };
   res.setHeader('Cache-Control', 'no-store');
   res.type('application/javascript').send('window.__TRACKER_RUNTIME__=' + JSON.stringify(runtime) + ';');
 });
@@ -315,9 +326,20 @@ sse.startKeepalive();
     console.log("[SERVER] Started at http://" + HOST + ":" + PORT);
     if (LOCAL_DEMO_MODE) console.log('[LOCAL] Demo mode enabled; LDAP and production PostgreSQL are disabled');
   });
-  if (LOCAL_DEMO_MODE) process.on('SIGINT', function() {
+  var localServerStopping = false;
+  function stopLocalServer() {
+    if (localServerStopping) return;
+    localServerStopping = true;
+    sse.stop();
     server.close(async function() {
-      try { await pool.close(); } finally { process.exit(0); }
+      try { await pool.close(); } finally {
+        if (releaseLocalDataLock) releaseLocalDataLock();
+        process.exit(0);
+      }
     });
-  });
+  }
+  if (LOCAL_DEMO_MODE) {
+    process.on('SIGINT', stopLocalServer);
+    process.on('SIGTERM', stopLocalServer);
+  }
 })();

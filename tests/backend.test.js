@@ -109,7 +109,7 @@ test('route permissions keep user management and directories at their previous b
 });
 test('all SQL migrations apply twice without losing data',async()=>{
   const first=(await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n;
-  assert.equal(first,16);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
+  assert.equal(first,17);await runMigrations(pool);assert.equal((await pool.query('SELECT count(*)::int AS n FROM _migrations')).rows[0].n,first);
 });
 
 test('producer vertical slice persists blocks, groups, assignments, completion and audit',async()=>{
@@ -250,6 +250,47 @@ test('D2 approvals use decision rights, drive warnings and retain an audited dec
   const before=(await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity='productionApproval'")).rows[0].n;
   assert.equal((await request('/api/producer/blocks/'+blockId+'/approvals','POST',{title:'Ошибка',taskId:otherTask,required:true})).status,400);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM audit_log WHERE entity='productionApproval'")).rows[0].n,before);
+});
+
+test('D2.6 team profiles expose concrete work, persist self-authored highlights and calculate project forecasts',async()=>{
+  await fixture();
+  await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1',roles:['продюсер']});
+  await request('/api/data/person','POST',{id:'producer-manager',name:'Пользователь 3',login:'user3',roles:['продюсер']});
+  const blockId=(await request('/api/producer/projects/p/blocks','POST',{
+    name:'Производство',ownerPersonId:'producer-a',startDate:'2026-10-01',deadline:'2026-10-30',status:'active',
+  })).body.id;
+  await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Подготовить съёмочный план',assigneePersonId:'producer-a',deadline:'2026-10-20',
+  });
+  await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Утвердить смету',assigneePersonId:'producer-manager',deadline:'2026-10-22',
+  });
+  await request('/api/data/task','POST',{id:7001,project:'p',seriesId:'s',series:'С01',status:'монтаж',day:'20.10.2026',from:10,to:18,person:'Продюсер А',note:'Сборка выпуска'});
+
+  const team=await request('/api/producer/team');
+  assert.equal(team.status,200);
+  const producer=team.body.people.find(item=>item.id==='producer-a');
+  assert.equal(producer.openTasks,1);assert.equal(producer.ownedBlocks,1);
+  assert.ok(producer.currentItems.some(item=>item.title==='Подготовить съёмочный план'));
+  assert.ok(producer.currentItems.some(item=>item.kind==='shift'&&item.title==='монтаж'));
+  assert.match(team.body.methodNote,/Индекс загрузки/);
+
+  const saved=await request('/api/producer/people/producer-manager/profile','PATCH',{
+    headline:'Продюсер документальных проектов',achievements:[{id:'first_film',icon:'★',title:'Первый фильм',description:'Сдал в срок'}],
+  },3);
+  assert.equal(saved.status,200);
+  assert.equal((await request('/api/producer/people/producer-a/profile','PATCH',{headline:'Чужая карточка',achievements:[]},3)).status,403);
+  const profile=await request('/api/producer/people/producer-manager','GET',undefined,3);
+  assert.equal(profile.status,200);assert.equal(profile.body.headline,'Продюсер документальных проектов');
+  assert.equal(profile.body.achievements[0].title,'Первый фильм');assert.equal(profile.body.canEditProfile,true);
+  assert.ok((await pool.query("SELECT id FROM audit_log WHERE entity='person' AND entity_id='producer-manager' AND action='update'")).rows.length===1);
+
+  const analytics=await request('/api/producer/analytics');
+  assert.equal(analytics.status,200);
+  const projectAnalytics=analytics.body.projects.find(item=>item.id==='p');
+  assert.equal(projectAnalytics.totalTasks,2);assert.equal(projectAnalytics.completedTasks,0);
+  assert.equal(projectAnalytics.forecastSource,'plan');assert.ok(projectAnalytics.forecastTotalDays>0);
+  assert.match(analytics.body.methodNote,/Прогноз/);
 });
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);

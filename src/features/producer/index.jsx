@@ -48,12 +48,19 @@ const PRODUCER_PROJECT_ART={
 };
 const PRODUCER_AVATAR_IDS=["demo-olga","demo-ilya","demo-anna","demo-denis","demo-maria","local-demo-producer","demo-pavel","demo-elena","demo-kirill","demo-sofia","demo-victor","demo-irina"];
 
+function producerOpenPerson(personId){
+  if(!personId)return;
+  window.location.hash=`producer/person/${encodeURIComponent(personId)}`;
+  window.scrollTo(0,0);
+}
+
 function ProducerAvatar({person,size="normal",title}){
   if(!person)return <span className={`producer-avatar ${size} fallback`}>?</span>;
   const id=typeof person==="string"?person:person.id;const name=typeof person==="string"?title||person:person.name;
   const index=PRODUCER_AVATAR_IDS.indexOf(id);const col=index>=0?index%4:0;const row=index>=0?Math.floor(index/4):0;
   const style=index>=0?{backgroundImage:'url("/demo/staff-avatars-v1.png")',backgroundSize:"400% 300%",backgroundPosition:`${col*100/3}% ${row*50}%`}:{};
-  return <span className={`producer-avatar ${size}${index<0?" fallback":""}`} title={name} style={style}>{index<0?String(name||"?").split(/\s+/).map(item=>item[0]).join("").slice(0,2):""}</span>;
+  const open=event=>{event.stopPropagation();producerOpenPerson(id);};
+  return <span className={`producer-avatar ${size}${index<0?" fallback":""}${id?" clickable":""}`} title={id?`${name} · дважды нажмите, чтобы открыть карточку`:name} style={style} role={id?"button":undefined} tabIndex={id?0:undefined} onDoubleClick={open} onKeyDown={event=>{if(id&&(event.key==="Enter"||event.key===" "))open(event);}}>{index<0?String(name||"?").split(/\s+/).map(item=>item[0]).join("").slice(0,2):""}</span>;
 }
 
 function ProducerProjectArt({project}){
@@ -103,9 +110,9 @@ function ProducerDateField({value,onChange,label}){
 
 function producerInitialScreen(){
   const hash=String(window.location.hash||"");
-  const detail=hash.match(/^#producer\/(project|block)\/([^/]+)/);
+  const detail=hash.match(/^#producer\/(project|block|person)\/([^/]+)/);
   if(detail)return {type:detail[1],id:decodeURIComponent(detail[2])};
-  const section=hash.match(/^#producer\/(projects|calendar|history)$/);
+  const section=hash.match(/^#producer\/(projects|calendar|team|analytics|history)$/);
   return {type:section?section[1]:"dashboard",id:""};
 }
 
@@ -130,6 +137,8 @@ function ProducerShell({user,onExit,children,onHome,screen,go}){
         <button className={screen.type==="dashboard"?"active":""} onClick={()=>go("dashboard")}>Главная</button>
         <button className={["projects","project","block"].includes(screen.type)?"active":""} onClick={()=>go("projects")}>Проекты</button>
         <button className={screen.type==="calendar"?"active":""} onClick={()=>go("calendar")}>Календарь</button>
+        <button className={["team","person"].includes(screen.type)?"active":""} onClick={()=>go("team")}>Команда</button>
+        <button className={screen.type==="analytics"?"active":""} onClick={()=>go("analytics")}>Аналитика</button>
         <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
       </nav>
       <div className="producer-user"><button onClick={onExit}>Постпродакшн</button><ProducerAvatar person={{id:"local-demo-producer",name:user.display_name}} size="small"/><span>{user.display_name}</span><b>{user.role}</b></div>
@@ -518,13 +527,86 @@ function ProducerBlockPage({blockId,go,toast}){
   </main>;
 }
 
+const PRODUCER_LOAD_LABELS={free:"Есть запас",balanced:"Ровная загрузка",busy:"Высокая загрузка",overloaded:"Перегруз"};
+
+function ProducerWorkload({person,large=false}){
+  return <div className={`producer-workload ${person.workloadLevel||"free"}${large?" large":""}`}>
+    <div><strong>{person.workloadPercent||0}%</strong><span>{PRODUCER_LOAD_LABELS[person.workloadLevel]||"Загрузка"}</span></div>
+    <i><b style={{width:(person.workloadPercent||0)+"%"}}/></i>
+  </div>;
+}
+
+function ProducerCurrentItem({item,go}){
+  const open=()=>{if(item.blockId)go("block",item.blockId);else if(item.projectId)go("project",item.projectId);};
+  return <button className={(item.overdue?"overdue ":"")+"producer-current-item"} onClick={open} style={{"--project-color":item.projectColor}}>
+    <i/><span><em>{item.kind==="shift"?"СМЕНА":"ЗАДАЧА"} · {item.projectName}</em><strong>{item.title}</strong><small>{item.kind==="shift"?[item.series,item.time].filter(Boolean).join(" · "):item.blockName}{item.comment?` · ${item.comment}`:""}</small></span><time>{producerDate(item.deadline)}</time>
+  </button>;
+}
+
+function ProducerTeamPage({go,refreshKey}){
+  const [result,setResult]=useState(null);const [error,setError]=useState("");const [search,setSearch]=useState("");
+  useEffect(()=>{let alive=true;producerRequest("/api/producer/team").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!result)return <main className="producer-main"><div className="producer-loading">Собираю загрузку команды…</div></main>;
+  const needle=search.trim().toLowerCase();const people=result.people.filter(person=>!needle||person.name.toLowerCase().includes(needle)||(person.roles||[]).join(" ").toLowerCase().includes(needle)||(person.projects||[]).some(project=>project.name.toLowerCase().includes(needle)));
+  return <main className="producer-main producer-team-page">
+    <header className="producer-page-heading"><div><span className="producer-eyebrow">КОМАНДА И ТЕКУЩАЯ РАБОТА</span><h1>Кто чем занят</h1><p>Задачи, ближайшие смены и ответственность за блоки на одном экране.</p></div><label className="producer-team-search">Найти сотрудника<input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Имя, роль или проект"/></label></header>
+    <section className="producer-load-legend"><span className="free">Есть запас</span><span className="balanced">Ровная загрузка</span><span className="busy">Высокая</span><span className="overloaded">Перегруз</span><p>{result.methodNote}</p></section>
+    <div className="producer-team-grid">{people.map(person=><article key={person.id} className={`producer-team-card ${person.workloadLevel}`} onDoubleClick={()=>go("person",person.id)}>
+      <header><ProducerAvatar person={person} size="profile"/><div><h2>{person.name}</h2><p>{(person.roles||[]).join(" · ")||"Роль не указана"}</p></div><button onClick={()=>go("person",person.id)}>Открыть →</button></header>
+      <p className="producer-team-headline">{person.headline||"Сотрудник пока не добавил описание своей роли."}</p><ProducerWorkload person={person}/>
+      <div className="producer-team-numbers"><span><b>{person.openTasks}</b> активных задач</span><span><b>{person.shiftHours7}</b> ч смен</span><span className={person.overdueTasks?"danger":""}><b>{person.overdueTasks}</b> просрочено</span></div>
+      <div className="producer-team-now"><strong>Сейчас в работе</strong>{person.currentItems.length?person.currentItems.slice(0,3).map(item=><ProducerCurrentItem key={item.kind+item.id} item={item} go={go}/>):<p>Активных задач и ближайших смен нет.</p>}</div>
+      <small className="producer-double-click-hint">Двойной щелчок открывает карточку сотрудника</small>
+    </article>)}</div>
+  </main>;
+}
+
+function ProducerProfileEditor({person,onSaved,onCancel}){
+  const [draft,setDraft]=useState({headline:person.headline||"",achievements:(person.achievements||[]).map(item=>({...item}))});const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+  function change(index,key,value){setDraft(current=>({...current,achievements:current.achievements.map((item,itemIndex)=>itemIndex===index?{...item,[key]:value}:item)}));}
+  function add(){if(draft.achievements.length>=4)return;setDraft(current=>({...current,achievements:[...current.achievements,{id:"highlight_"+Date.now().toString(36),icon:"★",title:"",description:""}]}));}
+  async function submit(event){event.preventDefault();setBusy(true);setError("");try{await producerRequest(`/api/producer/people/${encodeURIComponent(person.id)}/profile`,{method:"PATCH",body:JSON.stringify(draft)});onSaved("Карточка сотрудника сохранена");}catch(e){setError(e.message);}finally{setBusy(false);}}
+  return <form className="producer-profile-editor" onSubmit={submit}><label>Коротко о себе<input value={draft.headline} onChange={event=>setDraft({...draft,headline:event.target.value})} placeholder="Чем вы занимаетесь и в чём ваша сильная сторона"/></label><div className="producer-profile-editor-title"><strong>Мои достижения</strong><span>до 4 записей</span></div>{draft.achievements.map((item,index)=><div className="producer-achievement-edit" key={item.id}><input className="icon" aria-label="Значок достижения" value={item.icon} onChange={event=>change(index,"icon",event.target.value)} maxLength="8"/><input aria-label="Название достижения" value={item.title} onChange={event=>change(index,"title",event.target.value)} placeholder="Название" required/><textarea aria-label="Описание достижения" value={item.description} onChange={event=>change(index,"description",event.target.value)} placeholder="Коротко: что получилось"/><button type="button" onClick={()=>setDraft(current=>({...current,achievements:current.achievements.filter((_,itemIndex)=>itemIndex!==index)}))}>×</button></div>)}
+    {draft.achievements.length<4&&<button className="producer-add-achievement" type="button" onClick={add}>＋ Добавить достижение</button>}{error&&<div className="producer-inline-error">{error}</div>}<div className="producer-profile-editor-actions"><button type="button" onClick={onCancel}>Отмена</button><button className="producer-primary" disabled={busy}>{busy?"Сохраняю…":"Сохранить карточку"}</button></div></form>;
+}
+
+function ProducerPersonPage({personId,go,refreshKey,toast}){
+  const [person,setPerson]=useState(null);const [error,setError]=useState("");const [editing,setEditing]=useState(false);const [reload,setReload]=useState(0);
+  useEffect(()=>{let alive=true;setError("");producerRequest(`/api/producer/people/${encodeURIComponent(personId)}`).then(data=>alive&&setPerson(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[personId,refreshKey,reload]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!person)return <main className="producer-main"><div className="producer-loading">Открываю карточку сотрудника…</div></main>;
+  return <main className="producer-main producer-person-page"><div className="producer-breadcrumb"><button onClick={()=>go("team")}>← Команда</button><span>/</span><b>{person.name}</b></div>
+    <section className="producer-person-hero"><ProducerAvatar person={person} size="hero"/><div><span className="producer-eyebrow">КАРТОЧКА СОТРУДНИКА</span><h1>{person.name}</h1><p>{person.headline||"Описание своей роли пока не добавлено."}</p><small>{(person.roles||[]).join(" · ")||"Роль не указана"}</small></div><ProducerWorkload person={person} large/>{person.canEditProfile&&!editing&&<button className="producer-profile-edit-button" onClick={()=>setEditing(true)}>Изменить свою карточку</button>}</section>
+    {editing&&<ProducerProfileEditor person={person} onCancel={()=>setEditing(false)} onSaved={message=>{setEditing(false);setReload(value=>value+1);toast(message);}}/>}
+    <section className="producer-person-layout"><article className="producer-person-work"><header><div><span className="producer-eyebrow">ТЕКУЩАЯ РАБОТА</span><h2>Что сейчас на руках</h2></div><b>{person.currentItems.length}</b></header><div>{person.currentItems.length?person.currentItems.map(item=><ProducerCurrentItem key={item.kind+item.id} item={item} go={go}/>):<p className="producer-empty-profile">Нет активных задач и ближайших смен.</p>}</div></article>
+      <aside><section className="producer-person-stats"><h2>Загрузка</h2><div><span><b>{person.openTasks}</b>активных задач</span><span><b>{person.shiftHours7}</b>часов смен на 7 дней</span><span><b>{person.ownedBlocks}</b>блоков в ответственности</span><span className={person.overdueTasks?"danger":""}><b>{person.overdueTasks}</b>просроченных задач</span></div><p>{person.methodNote}</p></section>
+      <section className="producer-person-projects"><h2>Проекты</h2>{person.projects.length?person.projects.map(project=><button key={project.id} onClick={()=>go("project",project.id)} style={{"--project-color":project.color}}><i/>{project.name}<span>→</span></button>):<p>Нет активных проектов.</p>}</section></aside>
+    </section>
+    <section className="producer-achievements"><header><div><span className="producer-eyebrow">ЛИЧНЫЕ ОТМЕТКИ</span><h2>Чем я горжусь</h2></div><p>Эти записи сотрудник добавляет сам.</p></header><div>{person.achievements.length?person.achievements.map(item=><article key={item.id}><span>{item.icon}</span><div><strong>{item.title}</strong><p>{item.description||"Без дополнительного описания"}</p></div></article>):<p className="producer-empty-profile">Достижений пока нет — их можно добавить через редактирование карточки.</p>}</div></section>
+  </main>;
+}
+
+function ProducerAnalyticsPage({go,refreshKey}){
+  const [result,setResult]=useState(null);const [error,setError]=useState("");
+  useEffect(()=>{let alive=true;producerRequest("/api/producer/analytics").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!result)return <main className="producer-main"><div className="producer-loading">Считаю темп проектов…</div></main>;
+  const summary=result.summary;
+  return <main className="producer-main producer-analytics-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ТЕМП И ПРОГНОЗ</span><h1>Аналитика проектов</h1><p>Сколько длится продюсирование и куда ведёт текущий темп.</p></div><span className="producer-analytics-note">Прогноз пересчитывается<br/>по мере выполнения задач</span></header>
+    <section className="producer-analytics-summary"><article><span>Проектов в расчёте</span><b>{summary.projectCount}</b></article><article><span>Средний факт сейчас</span><b>{summary.averageElapsedDays}<small> дней</small></b></article><article><span>Средний прогноз целиком</span><b>{summary.averageForecastDays}<small> дней</small></b></article><article className={summary.riskCount?"danger":""}><span>Риск выхода за план</span><b>{summary.riskCount}</b></article></section>
+    <p className="producer-analytics-method">{result.methodNote}</p>
+    <section className="producer-analytics-projects">{result.projects.map(project=><article key={project.id} className={project.risk?"risk":""} style={{"--project-color":project.color}}><header><i/><div><h2>{project.name}</h2><p>{project.completedTasks} из {project.totalTasks} задач · {project.activePeople} участников</p></div><button onClick={()=>go("project",project.id)}>Открыть проект →</button></header><div className="producer-analytics-progress"><span><b style={{width:project.progress+"%"}}/></span><strong>{project.progress}%</strong></div><div className="producer-analytics-metrics"><span><small>Уже идёт</small><b>{project.elapsedDays} дней</b><em>с {producerDate(project.startDate)}</em></span><span><small>Осталось по прогнозу</small><b>{project.remainingDays} дней</b><em>до {producerDate(project.forecastFinish)}</em></span><span><small>Прогноз целиком</small><b>{project.forecastTotalDays||"—"} дней</b><em>{project.forecastSource==="tempo"?"по текущему темпу":"пока по плану"}</em></span><span className={project.risk?"danger":""}><small>Плановый срок</small><b>{producerDate(project.deadline)}</b><em>{project.risk?"прогноз позже срока":"укладываемся"}</em></span></div></article>)}</section>
+  </main>;
+}
+
 function ProducerWorkspace({user,data,onExit}){
   const [screen,setScreen]=useState(()=>producerInitialScreen());
   const [toastMessage,setToastMessage]=useState("");
   const [refreshKey,setRefreshKey]=useState(0);
   useEffect(()=>{const update=()=>setScreen(producerInitialScreen());window.addEventListener("hashchange",update);return()=>window.removeEventListener("hashchange",update);},[]);
   function go(type,id){
-    const staticSection=["dashboard","projects","calendar","history"].includes(type);
+    const staticSection=["dashboard","projects","calendar","team","analytics","history"].includes(type);
     const next={type,id:staticSection?"":id};
     setScreen(next);
     window.location.hash=type==="dashboard"?"producer":staticSection?`producer/${type}`:`producer/${type}/${encodeURIComponent(id)}`;
@@ -535,9 +617,12 @@ function ProducerWorkspace({user,data,onExit}){
     {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey} user={user}/>}
     {screen.type==="projects"&&<ProducerProjectsPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="calendar"&&<ProducerCalendarPage go={go} refreshKey={refreshKey}/>}
+    {screen.type==="team"&&<ProducerTeamPage go={go} refreshKey={refreshKey}/>}
+    {screen.type==="analytics"&&<ProducerAnalyticsPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="history"&&<ProducerHistoryPage refreshKey={refreshKey}/>}
     {screen.type==="project"&&<ProducerProjectMap projectId={screen.id} people={data.people||[]} go={go} toast={toast}/>} 
     {screen.type==="block"&&<ProducerBlockPage blockId={screen.id} go={go} toast={toast}/>} 
+    {screen.type==="person"&&<ProducerPersonPage personId={screen.id} go={go} refreshKey={refreshKey} toast={toast}/>}
     <ProducerToast message={toastMessage}/>
   </ProducerShell>;
 }

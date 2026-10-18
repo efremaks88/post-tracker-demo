@@ -50,6 +50,9 @@ test('producer dashboard exposes the personal hierarchy and direct warning navig
   assert.ok(source.includes('Требует внимания'));
   assert.ok(source.includes('function ProducerCalendarPage('));
   assert.ok(source.includes('function ProducerHistoryPage('));
+  assert.ok(source.includes('function ProducerTeamPage('));
+  assert.ok(source.includes('function ProducerPersonPage('));
+  assert.ok(source.includes('function ProducerAnalyticsPage('));
   assert.ok(source.includes('Фильтр истории по автору'));
   assert.ok(source.includes('Внутренний комментарий'));
   assert.ok(source.includes('onDoubleClick={()=>go("project",project.id)}'));

@@ -4,7 +4,7 @@ const createProducerModel = require('../lib/models/producer');
 const { PERMISSIONS } = require('../lib/policy');
 const {
   producerBlockSchema, producerBlockUpdateSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
-  producerApprovalSchema, producerApprovalDecisionSchema,
+  producerApprovalSchema, producerApprovalDecisionSchema, producerPersonProfileSchema,
 } = require('./schemas');
 
 module.exports = function registerProducerRoutes(app, pool, deps) {
@@ -47,6 +47,38 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     try {
       const scope = await policy.projectScope(req.session,false);
       res.json(await Producer.dashboard(pool,scope,req.session));
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/producer/team', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const scope = await policy.projectScope(req.session,false);
+      res.json(await Producer.team(pool,scope,req.session));
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/producer/people/:personId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const scope = await policy.projectScope(req.session,false);
+      const result = await Producer.personProfile(pool,req.params.personId,scope,req.session);
+      if (!result) return res.status(404).json({error:'Сотрудник не найден'});
+      res.json(result);
+    } catch (error) { next(error); }
+  });
+
+  app.patch('/api/producer/people/:personId/profile', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerPersonProfileSchema), write(['person'], async function(req,res) {
+    if (!(await Producer.canEditPersonProfile(req._tx,req.params.personId,req.session))) {
+      res.status(403).json({error:'Редактировать достижения может сам сотрудник или руководитель'});
+      return null;
+    }
+    await Producer.updatePersonProfile(req._tx,req.params.personId,req.body);
+    return {ok:true};
+  }));
+
+  app.get('/api/producer/analytics', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const scope = await policy.projectScope(req.session,false);
+      res.json(await Producer.analytics(pool,scope));
     } catch (error) { next(error); }
   });
 

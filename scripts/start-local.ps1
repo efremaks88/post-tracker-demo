@@ -137,5 +137,10 @@ try {
   $server.WaitForExit()
   exit $server.ExitCode
 } finally {
-  if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id }
+  if ($server -and -not $server.HasExited) {
+    # Ctrl+C reaches both this wrapper and the Node process. Give Node time to
+    # close PGlite and release its lock before using a forced termination.
+    $server.WaitForExit(10000) | Out-Null
+    if (-not $server.HasExited) { Stop-Process -Id $server.Id }
+  }
 }

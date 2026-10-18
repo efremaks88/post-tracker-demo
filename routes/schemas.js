@@ -166,6 +166,16 @@ var producerApprovalDecisionSchema = z.object({
   decision: z.enum(['approved','rejected']).nullable(),
   comment: z.string().trim().max(2000).default(''),
 });
+var producerProfileAchievementSchema = z.object({
+  id: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_-]+$/),
+  icon: z.string().trim().min(1).max(8).default('★'),
+  title: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(240).default(''),
+});
+var producerPersonProfileSchema = z.object({
+  headline: z.string().trim().max(160).default(''),
+  achievements: z.array(producerProfileAchievementSchema).max(4).default([]),
+});
 
 bulkSchema=bulkSchema.superRefine((data,ctx)=>{
   for(const key of ['projects','series','tasks','people','roles','stages','stageGroups','achievements','personAbsences']){
@@ -199,4 +209,5 @@ module.exports = {
   producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema,
   producerBlockUpdateSchema,
   producerApprovalSchema, producerApprovalDecisionSchema,
+  producerPersonProfileSchema,
 };
