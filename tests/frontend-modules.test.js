@@ -64,6 +64,10 @@ test('producer dashboard exposes the personal hierarchy and direct warning navig
   assert.ok(source.includes('function ProducerCompareProject('));
   assert.ok(source.includes('target.scrollIntoView'));
   assert.ok(source.includes('ProducerAvatar'));
+  assert.ok(source.includes('function ProducerCreateProjectModal('));
+  assert.ok(source.includes('＋ Создать проект'));
+  assert.ok(source.includes('producer-task-marker'));
+  assert.equal(source.includes('<span className="producer-paper-check">✓</span>'), false);
   assert.equal(source.includes('Проектная полка'), false);
   assert.equal(source.includes('Проект целиком'), false);
 });

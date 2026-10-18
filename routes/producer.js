@@ -3,7 +3,7 @@ const { auditMutation } = require('../lib/audit');
 const createProducerModel = require('../lib/models/producer');
 const { PERMISSIONS } = require('../lib/policy');
 const {
-  producerBlockSchema, producerBlockUpdateSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
+  producerProjectSchema, producerBlockSchema, producerBlockUpdateSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema, validate,
   producerApprovalSchema, producerApprovalDecisionSchema, producerPersonProfileSchema,
 } = require('./schemas');
 
@@ -81,6 +81,16 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
       res.json(await Producer.analytics(pool,scope));
     } catch (error) { next(error); }
   });
+
+  app.post('/api/producer/projects', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerProjectSchema), write(['project'], async function(req,res) {
+    if (!(await policy.can(req.session,PERMISSIONS.POST_PROJECT_CREATE))) {
+      res.status(403).json({error:'Нет прав на создание проекта'});
+      return null;
+    }
+    const result = await Producer.createProject(req._tx,req.body,req.session);
+    res.status(201);
+    return {ok:true,id:result.id,name:result.name};
+  }));
 
   app.get('/api/producer/projects/:projectId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
     try {

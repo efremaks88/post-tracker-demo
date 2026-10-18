@@ -170,10 +170,36 @@ function ProducerProjectCard({project,go}){
   </article>;
 }
 
-function ProducerDashboard({go,refreshKey,user}){
+const PRODUCER_PROJECT_COLORS=["#4f79d8","#4b8f82","#a85e7c","#c18b35","#c8644b","#7665b4"];
+
+function ProducerCreateProjectModal({onClose,onCreated}){
+  const [form,setForm]=useState({name:"",description:"",status:"подготовка",color:PRODUCER_PROJECT_COLORS[0]});
+  const [saving,setSaving]=useState(false);const [error,setError]=useState("");
+  async function submit(event){
+    event.preventDefault();setSaving(true);setError("");
+    try{
+      const created=await producerRequest("/api/producer/projects",{method:"POST",body:JSON.stringify(form)});
+      onCreated(created);
+    }catch(problem){setError(problem.message);}finally{setSaving(false);}
+  }
+  return <div className="producer-modal-backdrop" onMouseDown={event=>event.target===event.currentTarget&&onClose()}>
+    <form className="producer-modal producer-project-create-modal" onSubmit={submit}>
+      <header className="producer-modal-head"><div><span className="producer-eyebrow">НОВЫЙ ПРОЕКТ</span><h2>Создать проект</h2><p>Сначала достаточно названия. Блоки, задачи и сроки добавите внутри.</p></div><button type="button" aria-label="Закрыть" onClick={onClose}>×</button></header>
+      {error&&<div className="producer-inline-error">{error}</div>}
+      <label>Название проекта<input autoFocus required maxLength="200" value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} placeholder="Например, Новый документальный фильм"/></label>
+      <label>Короткое описание <small>необязательно</small><textarea maxLength="2000" value={form.description} onChange={event=>setForm(current=>({...current,description:event.target.value}))} placeholder="Что это за проект и в каком он формате"/></label>
+      <div className="producer-form-row"><label>Текущая стадия<select value={form.status} onChange={event=>setForm(current=>({...current,status:event.target.value}))}><option value="подготовка">Подготовка</option><option value="съёмка">Съёмка</option><option value="постпродакшн">Постпродакшн</option><option value="в работе">В работе</option></select></label>
+        <label>Цвет проекта<span className="producer-project-colors">{PRODUCER_PROJECT_COLORS.map(color=><button type="button" key={color} aria-label={"Выбрать цвет "+color} className={form.color===color?"active":""} style={{background:color}} onClick={()=>setForm(current=>({...current,color}))}/>)}</span></label></div>
+      <div className="producer-modal-actions"><button type="button" onClick={onClose}>Отмена</button><button className="producer-primary" disabled={saving||!form.name.trim()}>{saving?"Создаю…":"Создать и открыть"}</button></div>
+    </form>
+  </div>;
+}
+
+function ProducerDashboard({go,refreshKey,user,toast}){
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
   const [openAttention,setOpenAttention]=useState("");
+  const [creatingProject,setCreatingProject]=useState(false);
   useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю продюсерскую…</div></main>;
@@ -189,14 +215,14 @@ function ProducerDashboard({go,refreshKey,user}){
       <ProducerWeatherDoodle/>
     </section>
     <section className="producer-home-projects">
-      <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><button onClick={()=>go("projects")}>Смотреть все проекты →</button></header>
+      <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><span className="producer-project-heading-actions"><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button><button onClick={()=>go("projects")}>Смотреть все →</button></span></header>
       <div className="producer-project-preview-grid">{result.projects.slice(0,3).map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>
     </section>
     <section className="producer-home-columns">
       <article className="producer-clean-list producer-today-list">
         <header><h2>Мои задачи сегодня</h2><b>{todayTasks.length}</b></header>
         <div>{todayTasks.length?todayTasks.map(item=><button key={item.id} onClick={()=>go("block",item.blockId)}>
-          <span className="producer-paper-check">✓</span><span><strong>{item.title}</strong><small>{item.projectName} · {item.blockName}</small>{item.internalComment&&<em className="producer-list-comment">💬 {item.internalComment}</em>}</span><time>{producerDate(item.deadline)}</time>
+          <i className="producer-task-marker" style={{background:item.projectColor}}/><span><strong>{item.title}</strong><small>{item.projectName} · {item.blockName}</small>{item.internalComment&&<em className="producer-list-comment">💬 {item.internalComment}</em>}</span><time>{producerDate(item.deadline)}</time>
         </button>):<p>На сегодня задач нет.</p>}</div>
       </article>
       <article className="producer-clean-list producer-deadline-list">
@@ -213,15 +239,17 @@ function ProducerDashboard({go,refreshKey,user}){
         </section>}):<p>Срочных препятствий сейчас нет.</p>}</div>
       </article>
     </section>
+    {creatingProject&&<ProducerCreateProjectModal onClose={()=>setCreatingProject(false)} onCreated={created=>{setCreatingProject(false);toast("Проект «"+created.name+"» создан");go("project",created.id);}}/>}
   </main>;
 }
 
-function ProducerProjectsPage({go,refreshKey}){
+function ProducerProjectsPage({go,refreshKey,toast}){
   const [result,setResult]=useState(null);const [error,setError]=useState("");
+  const [creatingProject,setCreatingProject]=useState(false);
   useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю проекты…</div></main>;
-  return <main className="producer-main producer-directory-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ВСЕ ПРОЕКТЫ</span><h1>Проекты</h1><p>Один щелчок показывает детали, двойной открывает карту проекта.</p></div><b>{result.projects.length} в работе</b></header><div className="producer-project-directory">{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div></main>;
+  return <main className="producer-main producer-directory-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ВСЕ ПРОЕКТЫ</span><h1>Проекты</h1><p>Один щелчок показывает детали, двойной открывает карту проекта.</p></div><span className="producer-directory-actions"><b>{result.projects.length} в работе</b><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button></span></header><div className="producer-project-directory">{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>{creatingProject&&<ProducerCreateProjectModal onClose={()=>setCreatingProject(false)} onCreated={created=>{setCreatingProject(false);toast("Проект «"+created.name+"» создан");go("project",created.id);}}/>}</main>;
 }
 
 function producerMonthStart(date){return new Date(date.getFullYear(),date.getMonth(),1,12);}
@@ -614,8 +642,8 @@ function ProducerWorkspace({user,data,onExit}){
   }
   function toast(message){setToastMessage(message);setRefreshKey(value=>value+1);window.clearTimeout(ProducerWorkspace.toastTimer);ProducerWorkspace.toastTimer=window.setTimeout(()=>setToastMessage(""),2600);}
   return <ProducerShell user={user} onHome={()=>go("dashboard")} onExit={onExit} screen={screen} go={go}>
-    {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey} user={user}/>}
-    {screen.type==="projects"&&<ProducerProjectsPage go={go} refreshKey={refreshKey}/>}
+    {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey} user={user} toast={toast}/>}
+    {screen.type==="projects"&&<ProducerProjectsPage go={go} refreshKey={refreshKey} toast={toast}/>}
     {screen.type==="calendar"&&<ProducerCalendarPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="team"&&<ProducerTeamPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="analytics"&&<ProducerAnalyticsPage go={go} refreshKey={refreshKey}/>}

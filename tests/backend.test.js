@@ -199,6 +199,22 @@ test('D1 edits tasks and blocks and removes groups without losing their tasks',a
   assert.equal((await request('/api/producer/tasks/'+taskId,'PATCH',{deadline:'2026-02-30'})).status,400);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM audit_log')).rows[0].n,auditBefore);
 });
+test('producer project creation persists the project, assigns its creator and writes audit',async()=>{
+  const created=await request('/api/producer/projects','POST',{
+    name:'Новый тестовый проект',description:'Создан из продюсерской',status:'подготовка',color:'#4b8f82',
+  },3);
+  assert.equal(created.status,201);assert.ok(created.body.id);assert.equal(created.body.name,'Новый тестовый проект');
+  const stored=(await pool.query('SELECT name,abbr,description,status,color FROM projects WHERE id=$1',[created.body.id])).rows[0];
+  assert.deepEqual(stored,{name:'Новый тестовый проект',abbr:'НТ',description:'Создан из продюсерской',status:'подготовка',color:'#4b8f82'});
+  const manager=(await pool.query('SELECT user_uid,user_name FROM project_managers WHERE project_id=$1',[created.body.id])).rows[0];
+  assert.deepEqual(manager,{user_uid:'user3',user_name:'Пользователь 3'});
+  assert.equal((await request('/api/producer/projects/'+created.body.id,'GET',undefined,3)).status,200);
+  const audit=(await pool.query("SELECT action,entity,project_id,user_id,user_name FROM audit_log WHERE entity='project' AND entity_id=$1",[created.body.id])).rows[0];
+  assert.deepEqual(audit,{action:'create',entity:'project',project_id:created.body.id,user_id:3,user_name:'Пользователь 3'});
+  const before=(await pool.query('SELECT count(*)::int AS n FROM projects')).rows[0].n;
+  assert.equal((await request('/api/producer/projects','POST',{name:'',status:'подготовка',color:'#4b8f82'},3)).status,400);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM projects')).rows[0].n,before);
+});
 test('D2 approvals use decision rights, drive warnings and retain an audited decision trail',async()=>{
   await fixture();
   await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1'});

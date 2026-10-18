@@ -128,6 +128,13 @@ var producerBlockSchema = z.object({
   deadline: isoDate.nullable().optional(),
   status: z.enum(['planned','active','done','paused']).default('planned'),
 }).refine(function(value) { return !value.startDate || !value.deadline || value.startDate <= value.deadline; }, {message:'Block deadline precedes start date',path:['deadline']});
+var producerProjectSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  abbr: z.string().trim().max(20).default(''),
+  description: z.string().trim().max(2000).default(''),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#5f7f72'),
+  status: z.enum(['в работе','подготовка','съёмка','постпродакшн']).default('подготовка'),
+});
 var producerBlockUpdateSchema = z.object({
   name: z.string().trim().min(1).max(160).optional(),
   description: z.string().trim().max(2000).optional(),
@@ -207,6 +214,7 @@ module.exports = {
   projectSchema, seriesSchema, taskSchema, personSchema, achievementSchema,
   loginSchema, roleSchema, stageSchema, absenceSchema, bulkSchema, validate,
   producerBlockSchema, producerGroupSchema, producerTaskSchema, producerTaskUpdateSchema,
+  producerProjectSchema,
   producerBlockUpdateSchema,
   producerApprovalSchema, producerApprovalDecisionSchema,
   producerPersonProfileSchema,
