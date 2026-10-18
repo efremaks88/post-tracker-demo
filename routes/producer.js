@@ -50,6 +50,13 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     } catch (error) { next(error); }
   });
 
+  app.get('/api/producer/my-work', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const scope = await policy.projectScope(req.session,false);
+      res.json(await Producer.myWork(pool,scope,req.session));
+    } catch (error) { next(error); }
+  });
+
   app.get('/api/producer/team', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
     try {
       const scope = await policy.projectScope(req.session,false);
@@ -175,6 +182,17 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     const result = await Producer.createTask(req._tx,req.params.blockId,req.body);
     return {ok:true,id:result.id};
   }));
+
+  app.get('/api/producer/tasks/:taskId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const projectId = await Producer.taskProjectId(pool,req.params.taskId);
+      if (!projectId) return res.status(404).json({error:'Задача не найдена'});
+      if (!(await mayView(req,projectId,pool))) return res.status(403).json({error:'Нет доступа к проекту'});
+      const result = await Producer.task(pool,req.params.taskId);
+      if (!result) return res.status(404).json({error:'Задача не найдена'});
+      res.json(result);
+    } catch (error) { next(error); }
+  });
 
   app.patch('/api/producer/tasks/:taskId', requireAuth, requirePermission(PERMISSIONS.PRODUCER_WRITE), validate(producerTaskUpdateSchema), write(['productionTask'], async function(req,res) {
     const projectId = await Producer.taskProjectId(req._tx,req.params.taskId);

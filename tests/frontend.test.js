@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.13.0'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.14.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -140,7 +140,7 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.13.0'));
+  assert.ok(mobile.includes('DEV · v0.14.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
 });
@@ -149,7 +149,7 @@ test('producer workspace renders tasks, approvals and warnings',()=>{
   assert.ok(avatar.includes('Ольга Миронова'));assert.ok(avatar.includes('staff-avatars-v1.png'));
   const node=render('ProducerBlockNode',{block:{id:'b',name:'Препродакшн',status:'active',ownerPersonId:'demo-olga',ownerName:'Продюсер',deadline:'2026-10-20',completedTasks:1,totalTasks:3},onOpen:noop});
   assert.ok(node.includes('Препродакшн'));assert.ok(node.includes('В работе'));
-  const taskRow=render('ProducerTaskRow',{task:{id:'t',title:'Утвердить синопсис',assigneePersonId:'p',assigneeName:'Продюсер',completed:false},people:[{id:'p',name:'Продюсер'}],groups:[],onChange:noop});
+  const taskRow=render('ProducerTaskRow',{task:{id:'t',title:'Утвердить синопсис',assigneePersonId:'p',assigneeName:'Продюсер',completed:false},people:[{id:'p',name:'Продюсер'}],groups:[],onChange:noop,onOpen:noop});
   assert.ok(taskRow.includes('Утвердить синопсис'));assert.ok(taskRow.includes('Продюсер'));
   const quick=render('ProducerQuickTask',{groupId:'g',people:[{id:'p',name:'Продюсер'}],onCreate:noop});
   assert.ok(quick.includes('Добавить задачу'));
@@ -157,6 +157,14 @@ test('producer workspace renders tasks, approvals and warnings',()=>{
   assert.ok(warnings.includes('Предупреждения'));assert.ok(warnings.includes('Монтаж'));
   const approvals=render('ProducerApprovals',{approvals:[{id:'a',title:'Финальный сценарий',status:'pending',required:true,requestedByName:'Продюсер'}],tasks:[],canDecide:false,onCreate:noop,onDecision:noop});
   assert.ok(approvals.includes('Согласования'));assert.ok(approvals.includes('Ожидает решения'));
+});
+test('producer counts use correct Russian forms and focused work routes are present',()=>{
+  assert.equal(api.producerCount(1,'блок','блока','блоков'),'1 блок');
+  assert.equal(api.producerCount(2,'блок','блока','блоков'),'2 блока');
+  assert.equal(api.producerCount(5,'блок','блока','блоков'),'5 блоков');
+  assert.equal(api.producerCount(12,'блок','блока','блоков'),'12 блоков');
+  assert.ok(source.includes('Мои задачи</button>'));assert.ok(source.includes('/api/producer/my-work'));
+  assert.ok(source.includes('Подробнее и настройки'));
 });
 for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','HistoryView','DirectoryView']){
   test('empty data rendering: '+name,()=>{

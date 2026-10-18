@@ -215,6 +215,34 @@ test('producer project creation persists the project, assigns its creator and wr
   assert.equal((await request('/api/producer/projects','POST',{name:'',status:'подготовка',color:'#4b8f82'},3)).status,400);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM projects')).rows[0].n,before);
 });
+
+test('producer personal workspace and focused task page return only the current employee work',async()=>{
+  await fixture();
+  await request('/api/data/person','POST',{id:'producer-a',name:'Пользователь 1',login:'user1',roles:['продюсер']});
+  await request('/api/data/person','POST',{id:'producer-b',name:'Другой продюсер',login:'other',roles:['продюсер']});
+  const blockId=(await request('/api/producer/projects/p/blocks','POST',{
+    name:'Личный блок',ownerPersonId:'producer-a',deadline:'2000-01-03',status:'active',
+  })).body.id;
+  const groupId=(await request('/api/producer/blocks/'+blockId+'/groups','POST',{name:'Документы'})).body.id;
+  const ownTask=(await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Моя просроченная задача',internalComment:'Внутренний контекст',groupId,assigneePersonId:'producer-a',deadline:'2000-01-02',
+  })).body.id;
+  await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
+    title:'Чужая задача',assigneePersonId:'producer-b',deadline:'2000-01-02',
+  });
+
+  const personal=await request('/api/producer/my-work');
+  assert.equal(personal.status,200);assert.equal(personal.body.person.id,'producer-a');
+  assert.deepEqual(personal.body.tasks.map(item=>item.title),['Моя просроченная задача']);
+  assert.equal(personal.body.summary.openTasks,1);assert.equal(personal.body.summary.overdueTasks,1);
+  assert.equal(personal.body.blocks[0].name,'Личный блок');
+  assert.ok(personal.body.reminders.some(item=>item.taskId===ownTask&&item.level==='danger'));
+
+  const focused=await request('/api/producer/tasks/'+ownTask);
+  assert.equal(focused.status,200);assert.equal(focused.body.task.internalComment,'Внутренний контекст');
+  assert.equal(focused.body.block.name,'Личный блок');assert.equal(focused.body.project.id,'p');
+  assert.deepEqual(focused.body.groups.map(item=>item.name),['Документы']);
+});
 test('D2 approvals use decision rights, drive warnings and retain an audited decision trail',async()=>{
   await fixture();
   await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1'});
