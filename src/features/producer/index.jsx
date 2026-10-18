@@ -344,6 +344,23 @@ function ProducerControlGroups({items,go,withinProject=false}){
   </article>)}</div>;
 }
 
+function ProducerProjectControlCompact({items,go}){
+  const blocks=[];
+  (items||[]).forEach(item=>{
+    let block=blocks.find(row=>row.id===item.blockId);
+    if(!block){block={id:item.blockId,name:item.blockName,items:[]};blocks.push(block);}
+    block.items.push(item);
+  });
+  return <div className="producer-project-control-compact">{blocks.map(block=><section key={block.id}>
+    <header><button onClick={()=>go("block",block.id)}><span>БЛОК</span><strong>{block.name}</strong></button><b>{block.items.length}</b></header>
+    <div>{block.items.map(item=><button className={`producer-project-control-row ${item.severity} state-${item.state}`} key={item.id} onClick={()=>producerOpenControlItem(item,go)}>
+      <span className="producer-control-state">{item.severity==="high"?"!":item.kind==="approval"?"✓":"•"}</span>
+      <span><em>{PRODUCER_CONTROL_LABELS[item.state]||item.reason}</em><strong>{item.title}</strong></span>
+      <time>{producerDate(item.deadline)}<small>{producerRelativeDue(item.deadline)}</small></time>
+    </button>)}</div>
+  </section>)}</div>;
+}
+
 function ProducerControlPage({go,refreshKey}){
   const [result,setResult]=useState(null);const [error,setError]=useState("");const [filter,setFilter]=useState("all");
   useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/control").then(data=>alive&&setResult(data)).catch(problem=>alive&&setError(problem.message));return()=>{alive=false;};},[refreshKey]);
@@ -468,7 +485,7 @@ function ProducerProjectMap({projectId,people,go,toast}){
       <div className="producer-project-actions"><button className="producer-primary" onClick={()=>setShowCreate(true)}>＋ Новый блок</button><label>Второй проект<select aria-label="Открыть второй проект рядом" value={compareId} onChange={event=>setCompareId(event.target.value)}><option value="">Открыть рядом…</option>{projectChoices.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select></label></div>
     </section>
     <section className="producer-meaning-legend"><strong>Как читать карту</strong><span><i className="project" style={{background:result.project.color}}/>цвет — этот проект</span><span><i className="planned"/>запланировано</span><span><i className="active"/>в работе</span><span><i className="done"/>готово</span><span><i className="paused"/>пауза</span><span><i className="urgent"/>жёлтый и красный — срок</span></section>
-    {(result.controlItems||[]).length>0&&<section className="producer-project-control" style={{"--project-color":result.project.color}}><header><div><span className="producer-eyebrow">КОНТРОЛЬ ПРОЕКТА</span><h2>Сроки из всех блоков</h2><p>Просроченное и всё, что наступит в ближайшие 14 дней.</p></div><b>{result.controlItems.length}</b><button onClick={()=>go("control")}>Весь контроль →</button></header><ProducerControlGroups items={result.controlItems} go={go} withinProject/></section>}
+    {(result.controlItems||[]).length>0&&<section className="producer-project-control" style={{"--project-color":result.project.color}}><header><div><span className="producer-eyebrow">КОНТРОЛЬ ПРОЕКТА</span><h2>Ближайшие сроки</h2><p>Просроченное и ближайшие 14 дней.</p></div><b>{result.controlItems.length}</b><button onClick={()=>go("control")}>Весь контроль →</button></header><ProducerProjectControlCompact items={result.controlItems} go={go}/></section>}
     <div className={"producer-project-board"+(compareResult?" has-compare":"")}><div className="producer-project-primary-column"><section className="producer-map-section">
         <div className="producer-map-title"><div><small>ОБЩАЯ ЛИНИЯ</small><h2>Общие этапы</h2></div><span>{producerCount(common.length,"блок","блока","блоков")}</span></div>
         <div className="producer-map-track">{common.length?common.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<common.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map">Добавьте первый общий блок проекта</div>}</div>
