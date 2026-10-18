@@ -53,6 +53,10 @@ test('producer dashboard exposes the personal hierarchy and direct warning navig
   assert.ok(source.includes('Фильтр истории по автору'));
   assert.ok(source.includes('Внутренний комментарий'));
   assert.ok(source.includes('onDoubleClick={()=>go("project",project.id)}'));
+  assert.ok(source.includes('producer-calendar-day'));
+  assert.ok(source.includes('producer-calendar-hover-card'));
+  assert.ok(source.includes('Открыть второй проект рядом'));
+  assert.ok(source.includes('function ProducerCompareProject('));
   assert.ok(source.includes('target.scrollIntoView'));
   assert.ok(source.includes('ProducerAvatar'));
   assert.equal(source.includes('Проектная полка'), false);

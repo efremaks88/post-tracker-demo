@@ -150,6 +150,7 @@ function ProducerProjectCard({project,go}){
     </button>
     <div className="producer-project-preview-copy">
       <strong>{project.name}</strong><small>{project.description||"Проект без описания"}</small>
+      <div className="producer-project-figures"><b>{project.progress||0}%</b><span>{project.completedTasks}/{project.totalTasks} задач</span><span>{project.totalBlocks} блоков</span></div>
       <ProducerProgress done={project.completedTasks} total={project.totalTasks}/>
       <div className="producer-project-preview-meta">
         <span className="producer-project-team"><span className="producer-avatar-stack">{(project.team||[]).map(person=><ProducerAvatar key={person.id} person={person} size="tiny"/>)}</span><small>Команда: {(project.team||[]).length}</small></span>
@@ -218,17 +219,19 @@ function producerMonthStart(date){return new Date(date.getFullYear(),date.getMon
 function producerIsoLocal(date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;}
 
 function ProducerCalendarPage({go,refreshKey}){
-  const [result,setResult]=useState(null);const [error,setError]=useState("");const [month,setMonth]=useState(()=>producerMonthStart(new Date()));
+  const [result,setResult]=useState(null);const [error,setError]=useState("");const [month,setMonth]=useState(()=>producerMonthStart(new Date()));const [selectedDay,setSelectedDay]=useState(()=>producerIsoLocal(new Date()));
   useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Собираю календарь…</div></main>;
   const first=producerMonthStart(month);const offset=(first.getDay()+6)%7;const gridStart=new Date(first);gridStart.setDate(first.getDate()-offset);
   const days=Array.from({length:42},(_,index)=>{const value=new Date(gridStart);value.setDate(gridStart.getDate()+index);return value;});
-  const items=result.calendarItems||[];const today=producerIsoLocal(new Date());
-  function shift(value){setMonth(current=>new Date(current.getFullYear(),current.getMonth()+value,1,12));}
+  const items=result.calendarItems||[];const today=producerIsoLocal(new Date());const selectedItems=items.filter(item=>item.deadline===selectedDay);
+  function shift(value){setMonth(current=>{const next=new Date(current.getFullYear(),current.getMonth()+value,1,12);setSelectedDay(producerIsoLocal(next));return next;});}
   return <main className="producer-main producer-calendar-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">СРОКИ ЗАДАЧ</span><h1>Календарь</h1><p>Нажмите на срок, чтобы перейти прямо в нужный блок.</p></div><div className="producer-month-switch"><button onClick={()=>shift(-1)}>←</button><strong>{month.toLocaleDateString("ru-RU",{month:"long",year:"numeric"})}</strong><button onClick={()=>shift(1)}>→</button></div></header>
-    <div className="producer-calendar-weekdays">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(day=><span key={day}>{day}</span>)}</div>
-    <div className="producer-calendar-grid">{days.map(day=>{const iso=producerIsoLocal(day);const rows=items.filter(item=>item.deadline===iso);return <section key={iso} className={(day.getMonth()!==month.getMonth()?"outside ":"")+(iso===today?"today":"")}><time>{day.getDate()}</time><div>{rows.slice(0,3).map(item=><button key={item.id} style={{"--project-color":item.projectColor}} onClick={()=>go("block",item.blockId)} title={item.projectName+": "+item.title}><i/><span>{item.title}</span></button>)}{rows.length>3&&<small>ещё {rows.length-3}</small>}</div></section>})}</div>
+    <div className="producer-calendar-layout"><section className="producer-calendar-board"><div className="producer-calendar-weekdays">{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(day=><span key={day}>{day}</span>)}</div>
+      <div className="producer-calendar-grid">{days.map(day=>{const iso=producerIsoLocal(day);const rows=items.filter(item=>item.deadline===iso);return <section key={iso} onClick={()=>setSelectedDay(iso)} className={(day.getMonth()!==month.getMonth()?"outside ":"")+(iso===today?"today ":"")+(iso===selectedDay?"selected":"")}><time>{day.getDate()}</time><div>{rows.slice(0,3).map(item=><button key={item.id} style={{"--project-color":item.projectColor}} onClick={event=>{event.stopPropagation();go("block",item.blockId);}}><i/><span>{item.title}</span><span className="producer-calendar-hover-card"><em>{item.projectName}</em><strong>{item.title}</strong><small>{item.blockName}</small><b>{item.assigneeName||"Исполнитель не указан"} · {producerDate(item.deadline)}</b></span></button>)}{rows.length>3&&<small>ещё {rows.length-3}</small>}</div></section>})}</div></section>
+      <aside className="producer-calendar-day"><span className="producer-eyebrow">ВЫБРАННЫЙ ДЕНЬ</span><h2>{producerDay(selectedDay).toLocaleDateString("ru-RU",{day:"numeric",month:"long",weekday:"long"})}</h2><p>{selectedItems.length?`${selectedItems.length} задач со сроком`:"Задач на этот день нет"}</p><div>{selectedItems.map(item=><button key={item.id} style={{"--project-color":item.projectColor}} onClick={()=>go("block",item.blockId)}><i/><span><em>{item.projectName}</em><strong>{item.title}</strong><small>{item.blockName} · {item.assigneeName||"без исполнителя"}</small>{item.internalComment&&<b>💬 {item.internalComment}</b>}</span><mark>Открыть →</mark></button>)}</div></aside>
+    </div>
   </main>;
 }
 
@@ -268,14 +271,33 @@ function ProducerBlockNode({block,onOpen}){
   </button>;
 }
 
+function ProducerCompareProject({result,onClose,onOpenProject,onOpenBlock}){
+  const totals=result.blocks.reduce((sum,block)=>({tasks:sum.tasks+block.totalTasks,done:sum.done+block.completedTasks,warnings:sum.warnings+block.warningCount}),{tasks:0,done:0,warnings:0});
+  return <aside className="producer-project-compare" style={{"--project-color":result.project.color}}>
+    <header><div><span className="producer-eyebrow">ОТКРЫТ РЯДОМ</span><h2>{result.project.name}</h2><p>{result.project.description||"Описание проекта пока не добавлено."}</p></div><button aria-label="Закрыть второй проект" onClick={onClose}>×</button></header>
+    <div className="producer-compare-summary"><span><b>{totals.done}/{totals.tasks}</b><small>задач готово</small></span><span><b>{result.blocks.length}</b><small>блоков</small></span><span className={totals.warnings?"warning":""}><b>{totals.warnings}</b><small>требуют внимания</small></span></div>
+    <div className="producer-compare-blocks">{result.blocks.map(block=><button key={block.id} className={"producer-compare-block due-"+producerDueState(block.deadline,block.status==="done")} onClick={()=>onOpenBlock(block.id)}>
+      <span>{block.seriesName||"Общий этап"}</span><strong>{block.name}</strong><small><ProducerAvatar person={{id:block.ownerPersonId,name:block.ownerName}} size="tiny"/>{block.ownerName||"Ответственный не указан"}</small>
+      <div><ProducerProgress done={block.completedTasks} total={block.totalTasks}/><time>{producerDate(block.deadline)}</time></div>
+    </button>)}</div>
+    <button className="producer-compare-open" onClick={onOpenProject}>Открыть карту этого проекта →</button>
+  </aside>;
+}
+
 function ProducerProjectMap({projectId,people,go,toast}){
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
   const [showCreate,setShowCreate]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [projectChoices,setProjectChoices]=useState([]);
+  const [compareId,setCompareId]=useState("");
+  const [compareResult,setCompareResult]=useState(null);
+  const [compareLoading,setCompareLoading]=useState(false);
   const [form,setForm]=useState({name:"",description:"",seriesId:"",ownerPersonId:people[0]?.id||"",startDate:"",deadline:"",status:"planned"});
   const load=()=>producerRequest("/api/producer/projects/"+encodeURIComponent(projectId)).then(setResult).catch(e=>setError(e.message));
-  useEffect(()=>{load();},[projectId]);
+  useEffect(()=>{setResult(null);setCompareId("");setCompareResult(null);load();},[projectId]);
+  useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setProjectChoices((data.projects||[]).filter(project=>project.id!==projectId))).catch(()=>{});return()=>{alive=false;};},[projectId]);
+  useEffect(()=>{let alive=true;if(!compareId){setCompareResult(null);setCompareLoading(false);return()=>{alive=false;};}setCompareLoading(true);producerRequest("/api/producer/projects/"+encodeURIComponent(compareId)).then(data=>{if(alive){setCompareResult(data);setError("");}}).catch(e=>alive&&setError(e.message)).finally(()=>alive&&setCompareLoading(false));return()=>{alive=false;};},[compareId]);
   async function createBlock(event){
     event.preventDefault();setSaving(true);setError("");
     try{
@@ -290,19 +312,22 @@ function ProducerProjectMap({projectId,people,go,toast}){
     <section className="producer-project-hero" style={{"--project-color":result.project.color}}>
       <div className="producer-cover">{result.project.abbr||result.project.name.slice(0,2)}</div>
       <div><span className="producer-eyebrow">КАРТА ПРОЕКТА</span><h1>{result.project.name}</h1><p>{result.project.description||"Описание проекта пока не добавлено."}</p></div>
-      <button className="producer-primary" onClick={()=>setShowCreate(true)}>＋ Новый блок</button>
+      <div className="producer-project-actions"><button className="producer-primary" onClick={()=>setShowCreate(true)}>＋ Новый блок</button><label>Второй проект<select aria-label="Открыть второй проект рядом" value={compareId} onChange={event=>setCompareId(event.target.value)}><option value="">Открыть рядом…</option>{projectChoices.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select></label></div>
     </section>
-    <section className="producer-map-section">
-      <div className="producer-map-title"><div><small>ОБЩАЯ ЛИНИЯ</small><h2>Общие этапы</h2></div><span>{common.length} блоков</span></div>
-      <div className="producer-map-track">{common.length?common.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<common.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map">Добавьте первый общий блок проекта</div>}</div>
-    </section>
-    <section className="producer-series-map">
-      <div className="producer-map-title"><div><small>СЕРИЙНЫЕ ВЕТКИ</small><h2>Работа по сериям</h2></div></div>
-      {result.series.map(series=>{const blocks=result.blocks.filter(block=>block.seriesId===series.id);return <div className="producer-series-row" key={series.id}>
-        <div className="producer-series-label"><span>{String(series.order||1).padStart(2,"0")}</span><strong>{series.name}</strong></div>
-        <div className="producer-map-track">{blocks.length?blocks.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<blocks.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map compact">Блоков пока нет</div>}</div>
-      </div>})}
-    </section>
+    <div className={"producer-project-board"+(compareResult?" has-compare":"")}><div className="producer-project-primary-column"><section className="producer-map-section">
+        <div className="producer-map-title"><div><small>ОБЩАЯ ЛИНИЯ</small><h2>Общие этапы</h2></div><span>{common.length} блоков</span></div>
+        <div className="producer-map-track">{common.length?common.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<common.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map">Добавьте первый общий блок проекта</div>}</div>
+      </section>
+      <section className="producer-series-map">
+        <div className="producer-map-title"><div><small>СЕРИЙНЫЕ ВЕТКИ</small><h2>Работа по сериям</h2></div></div>
+        {result.series.map(series=>{const blocks=result.blocks.filter(block=>block.seriesId===series.id);return <div className="producer-series-row" key={series.id}>
+          <div className="producer-series-label"><span>{String(series.order||1).padStart(2,"0")}</span><strong>{series.name}</strong></div>
+          <div className="producer-map-track">{blocks.length?blocks.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<blocks.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map compact">Блоков пока нет</div>}</div>
+        </div>})}
+      </section></div>
+      {compareLoading&&<aside className="producer-project-compare loading">Загружаю второй проект…</aside>}
+      {compareResult&&<ProducerCompareProject result={compareResult} onClose={()=>setCompareId("")} onOpenProject={()=>go("project",compareResult.project.id)} onOpenBlock={id=>go("block",id)}/>}
+    </div>
     {showCreate&&<div className="producer-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false);}}><form className="producer-modal" onSubmit={createBlock}>
       <div className="producer-modal-head"><div><small>НОВЫЙ ЭТАП</small><h2>Создать блок</h2></div><button type="button" onClick={()=>setShowCreate(false)}>×</button></div>
       <label>Название<input autoFocus value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Например, Препродакшн" required/></label>
