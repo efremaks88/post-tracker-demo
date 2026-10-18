@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.14.0'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.15.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -140,7 +140,7 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.14.0'));
+  assert.ok(mobile.includes('DEV · v0.15.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
 });
@@ -157,6 +157,8 @@ test('producer workspace renders tasks, approvals and warnings',()=>{
   assert.ok(warnings.includes('Предупреждения'));assert.ok(warnings.includes('Монтаж'));
   const approvals=render('ProducerApprovals',{approvals:[{id:'a',title:'Финальный сценарий',status:'pending',required:true,requestedByName:'Продюсер'}],tasks:[],canDecide:false,onCreate:noop,onDecision:noop});
   assert.ok(approvals.includes('Согласования'));assert.ok(approvals.includes('Ожидает решения'));
+  const control=render('ProducerControlGroups',{items:[{id:'task:t',kind:'task',state:'overdue',severity:'high',title:'Сдать мастер',reason:'Задача просрочена',deadline:'2026-10-10',taskId:'t',blockId:'b',blockName:'Финал',projectId:'p',projectName:'Северный ветер',projectColor:'#4f79d8'}],go:noop});
+  assert.ok(control.includes('Северный ветер'));assert.ok(control.includes('Финал'));assert.ok(control.includes('Сдать мастер'));assert.ok(control.includes('Просрочено'));
 });
 test('producer counts use correct Russian forms and focused work routes are present',()=>{
   assert.equal(api.producerCount(1,'блок','блока','блоков'),'1 блок');
@@ -164,6 +166,7 @@ test('producer counts use correct Russian forms and focused work routes are pres
   assert.equal(api.producerCount(5,'блок','блока','блоков'),'5 блоков');
   assert.equal(api.producerCount(12,'блок','блока','блоков'),'12 блоков');
   assert.ok(source.includes('Мои задачи</button>'));assert.ok(source.includes('/api/producer/my-work'));
+  assert.ok(source.includes('Контроль</button>'));assert.ok(source.includes('/api/producer/control'));
   assert.ok(source.includes('Подробнее и настройки'));
 });
 for(const name of ['TodayView','ProjectsView','CalendarView','GanttView','DaysView','PeopleView','AnalyticsView','HistoryView','DirectoryView']){

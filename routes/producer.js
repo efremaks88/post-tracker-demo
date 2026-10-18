@@ -57,6 +57,13 @@ module.exports = function registerProducerRoutes(app, pool, deps) {
     } catch (error) { next(error); }
   });
 
+  app.get('/api/producer/control', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
+    try {
+      const scope = await policy.projectScope(req.session,false);
+      res.json(await Producer.control(pool,scope));
+    } catch (error) { next(error); }
+  });
+
   app.get('/api/producer/team', requireAuth, requirePermission(PERMISSIONS.PRODUCER_READ), async function(req,res,next) {
     try {
       const scope = await policy.projectScope(req.session,false);

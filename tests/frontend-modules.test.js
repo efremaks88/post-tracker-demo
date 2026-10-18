@@ -55,6 +55,8 @@ test('producer dashboard exposes the personal hierarchy and direct warning navig
   assert.ok(source.includes('aria-expanded={expanded}'));
   assert.ok(source.includes('function ProducerPersonPage('));
   assert.ok(source.includes('function ProducerAnalyticsPage('));
+  assert.ok(source.includes('function ProducerControlPage('));
+  assert.ok(source.includes('Сроки из всех блоков'));
   assert.ok(source.includes('Фильтр истории по автору'));
   assert.ok(source.includes('Внутренний комментарий'));
   assert.ok(source.includes('onDoubleClick={()=>go("project",project.id)}'));

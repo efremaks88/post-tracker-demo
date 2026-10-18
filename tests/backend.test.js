@@ -285,6 +285,13 @@ test('D2 approvals use decision rights, drive warnings and retain an audited dec
   assert.ok(dashboard.attention.some(item=>item.kind==='task'&&item.reason==='Задача просрочена'));
   assert.ok(dashboard.attention.some(item=>item.kind==='block'&&item.reason==='Просрочен срок блока'));
   assert.ok(dashboard.attention.some(item=>item.kind==='approval'&&item.reason==='Согласование отклонено'));
+  const control=await request('/api/producer/control');
+  assert.equal(control.status,200);assert.ok(control.body.summary.overdue>=3);
+  assert.ok(control.body.items.some(item=>item.kind==='task'&&item.blockName==='Сдача проекта'&&item.projectId==='p'));
+  assert.ok(control.body.items.some(item=>item.kind==='block'&&item.blockId===blockId));
+  assert.ok(control.body.items.some(item=>item.kind==='approval'&&item.state==='rejected'));
+  assert.ok(projectMap.controlItems.some(item=>item.kind==='task'&&item.taskId===taskId));
+  assert.ok(projectMap.controlItems.every(item=>item.projectId==='p'));
   const actions=(await pool.query("SELECT action,user_name FROM audit_log WHERE entity='productionApproval' ORDER BY id")).rows;
   assert.deepEqual(actions.map(item=>item.action),['create','approve','restore','reject']);
   assert.deepEqual(actions.map(item=>item.user_name),['Пользователь 3','Пользователь 2','Пользователь 1','Пользователь 1']);
