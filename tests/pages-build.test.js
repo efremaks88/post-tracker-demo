@@ -47,6 +47,11 @@ test('Pages demo API loads fixtures and persists a created project', async()=>{
   assert.equal(dashboard.projects.length,7);
   assert.ok(dashboard.projects.some(project=>project.id==='demo-north'));
 
+  const marketingResponse=await window.fetch('/api/producer/marketing');
+  const marketing=await marketingResponse.json();
+  assert.equal(marketing.summary.series,10);
+  assert.ok(marketing.projects.some(project=>project.id==='demo-north'&&project.series.some(series=>series.airDate==='2026-11-06')));
+
   const createResponse=await window.fetch('/api/producer/projects',{
     method:'POST',
     body:JSON.stringify({name:'Демо заказчика',description:'Проверка',status:'подготовка',color:'#4f79d8'}),

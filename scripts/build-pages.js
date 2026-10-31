@@ -28,6 +28,7 @@ function buildSeed() {
     dashboard: readJson(path.join(FIXTURE_DIR, 'dashboard.json')),
     myWork: readJson(path.join(FIXTURE_DIR, 'my_work.json')),
     control: readJson(path.join(FIXTURE_DIR, 'control.json')),
+    marketing: readJson(path.join(FIXTURE_DIR, 'marketing.json')),
     team: readJson(path.join(FIXTURE_DIR, 'team.json')),
     analytics: readJson(path.join(FIXTURE_DIR, 'analytics.json')),
     history: readJson(path.join(FIXTURE_DIR, 'history.json')),

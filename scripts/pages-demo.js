@@ -4,7 +4,7 @@
   const seed = window.__POST_TRACKER_PAGES_SEED__;
   if (!seed) throw new Error('GitHub Pages demo seed is missing');
 
-  const STORAGE_KEY = 'post_tracker_github_pages_demo_v015';
+  const STORAGE_KEY = 'post_tracker_github_pages_demo_v016';
   const clone = value => JSON.parse(JSON.stringify(value));
   const uid = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
   let state;
@@ -70,6 +70,7 @@
     if (method==='GET' && path==='/api/producer/dashboard') return json(state.dashboard);
     if (method==='GET' && path==='/api/producer/my-work') return json(state.myWork);
     if (method==='GET' && path==='/api/producer/control') return json(state.control);
+    if (method==='GET' && path==='/api/producer/marketing') return json(state.marketing);
     if (method==='GET' && path==='/api/producer/team') return json(state.team);
     if (method==='GET' && path==='/api/producer/analytics') return json(state.analytics);
     if (method==='GET' && path==='/api/audit/events') return json(state.history);

@@ -118,7 +118,7 @@ function producerInitialScreen(){
   const hash=String(window.location.hash||"");
   const detail=hash.match(/^#producer\/(project|block|task|person)\/([^/]+)/);
   if(detail)return {type:detail[1],id:decodeURIComponent(detail[2])};
-  const section=hash.match(/^#producer\/(my-work|projects|calendar|control|team|analytics|history)$/);
+  const section=hash.match(/^#producer\/(my-work|projects|marketing|calendar|control|team|analytics|history)$/);
   return {type:section?section[1]:"dashboard",id:""};
 }
 
@@ -135,7 +135,7 @@ function ProducerProgress({done,total}){
 function ProducerQuickRail({go}){
   const [open,setOpen]=useState(false);
   return <aside className={"producer-quick-rail"+(open?" open":"")}>
-    {open&&<div><strong>Быстрый переход</strong><button onClick={()=>{setOpen(false);go("my-work");}}>Мои задачи</button><button onClick={()=>{setOpen(false);go("control");}}>Контроль сроков</button><button onClick={()=>{setOpen(false);go("projects");}}>Все проекты</button><button onClick={()=>{setOpen(false);go("calendar");}}>Календарь</button></div>}
+    {open&&<div><strong>Быстрый переход</strong><button onClick={()=>{setOpen(false);go("my-work");}}>Мои задачи</button><button onClick={()=>{setOpen(false);go("marketing");}}>Маркетинг</button><button onClick={()=>{setOpen(false);go("control");}}>Контроль сроков</button><button onClick={()=>{setOpen(false);go("projects");}}>Все проекты</button><button onClick={()=>{setOpen(false);go("calendar");}}>Календарь</button></div>}
     <button className="producer-quick-rail-main" aria-label="Открыть быстрые действия" title="Быстрые действия" onClick={()=>setOpen(value=>!value)}>{open?"×":"＋"}</button>
   </aside>;
 }
@@ -151,11 +151,14 @@ function ProducerShell({user,onExit,children,onHome,screen,go}){
         <button className={screen.type==="dashboard"?"active":""} onClick={()=>go("dashboard")}>Главная</button>
         <button className={["my-work","task"].includes(screen.type)?"active":""} onClick={()=>go("my-work")}>Мои задачи</button>
         <button className={["projects","project","block"].includes(screen.type)?"active":""} onClick={()=>go("projects")}>Проекты</button>
+        <button className={screen.type==="marketing"?"active":""} onClick={()=>go("marketing")}>Маркетинг</button>
         <button className={screen.type==="calendar"?"active":""} onClick={()=>go("calendar")}>Календарь</button>
-        <button className={screen.type==="control"?"active":""} onClick={()=>go("control")}>Контроль</button>
-        <button className={["team","person"].includes(screen.type)?"active":""} onClick={()=>go("team")}>Команда</button>
-        <button className={screen.type==="analytics"?"active":""} onClick={()=>go("analytics")}>Аналитика</button>
-        <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
+        <details className={["control","team","person","analytics","history"].includes(screen.type)?"active":""}><summary>Ещё</summary><div>
+          <button className={screen.type==="control"?"active":""} onClick={()=>go("control")}>Контроль сроков</button>
+          <button className={["team","person"].includes(screen.type)?"active":""} onClick={()=>go("team")}>Команда</button>
+          <button className={screen.type==="analytics"?"active":""} onClick={()=>go("analytics")}>Аналитика</button>
+          <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
+        </div></details>
       </nav>
       <div className="producer-user"><button onClick={onExit}>Постпродакшн</button><ProducerAvatar person={{id:"local-demo-producer",name:user.display_name}} size="small"/><span>{user.display_name}</span><b>{user.role}</b></div>
     </header>
@@ -204,9 +207,11 @@ function ProducerCreateProjectModal({onClose,onCreated}){
       <header className="producer-modal-head"><div><span className="producer-eyebrow">НОВЫЙ ПРОЕКТ</span><h2>Создать проект</h2><p>Сначала достаточно названия. Блоки, задачи и сроки добавите внутри.</p></div><button type="button" aria-label="Закрыть" onClick={onClose}>×</button></header>
       {error&&<div className="producer-inline-error">{error}</div>}
       <label>Название проекта<input autoFocus required maxLength="200" value={form.name} onChange={event=>setForm(current=>({...current,name:event.target.value}))} placeholder="Например, Новый документальный фильм"/></label>
-      <label>Короткое описание <small>необязательно</small><textarea maxLength="2000" value={form.description} onChange={event=>setForm(current=>({...current,description:event.target.value}))} placeholder="Что это за проект и в каком он формате"/></label>
-      <div className="producer-form-row"><label>Текущая стадия<select value={form.status} onChange={event=>setForm(current=>({...current,status:event.target.value}))}><option value="подготовка">Подготовка</option><option value="съёмка">Съёмка</option><option value="постпродакшн">Постпродакшн</option><option value="в работе">В работе</option></select></label>
-        <label>Цвет проекта<span className="producer-project-colors">{PRODUCER_PROJECT_COLORS.map(color=><button type="button" key={color} aria-label={"Выбрать цвет "+color} className={form.color===color?"active":""} style={{background:color}} onClick={()=>setForm(current=>({...current,color}))}/>)}</span></label></div>
+      <details className="producer-create-advanced"><summary>Добавить описание и настройки <span>необязательно</span></summary><div>
+        <label>Короткое описание<textarea maxLength="2000" value={form.description} onChange={event=>setForm(current=>({...current,description:event.target.value}))} placeholder="Что это за проект и в каком он формате"/></label>
+        <div className="producer-form-row"><label>Текущая стадия<select value={form.status} onChange={event=>setForm(current=>({...current,status:event.target.value}))}><option value="подготовка">Подготовка</option><option value="съёмка">Съёмка</option><option value="постпродакшн">Постпродакшн</option><option value="в работе">В работе</option></select></label>
+          <label>Цвет проекта<span className="producer-project-colors">{PRODUCER_PROJECT_COLORS.map(color=><button type="button" key={color} aria-label={"Выбрать цвет "+color} className={form.color===color?"active":""} style={{background:color}} onClick={()=>setForm(current=>({...current,color}))}/>)}</span></label></div>
+      </div></details>
       <div className="producer-modal-actions"><button type="button" onClick={onClose}>Отмена</button><button className="producer-primary" disabled={saving||!form.name.trim()}>{saving?"Создаю…":"Создать и открыть"}</button></div>
     </form>
   </div>;
@@ -361,6 +366,20 @@ function ProducerProjectControlCompact({items,go}){
   </section>)}</div>;
 }
 
+const PRODUCER_MARKETING_LABELS={"no-date":"Нет даты",early:"Рано",prepare:"Готовить запуск",ready:"Материал готов",risk:"Риск",aired:"В эфире"};
+
+function ProducerMilestoneStrip({series,compact=false}){
+  const milestones=series.milestones||[];
+  return <div className={"producer-milestone-strip"+(compact?" compact":"")}>{milestones.length?milestones.map(item=><span key={item.key} className={item.date&&item.date<=new Date().toISOString().slice(0,10)?"passed":""}><i/><small>{item.label}</small><b>{producerDate(item.date)}</b></span>):<p>Ключевые даты ещё не заполнены в пост-трекере.</p>}</div>;
+}
+
+function ProducerPostContext({series,summary,go}){
+  if(!(series||[]).length)return null;
+  return <section className="producer-post-context"><header><div><span className="producer-eyebrow">КОНТЕКСТ ИЗ ПОСТА</span><h2>Монтаж и эфир</h2><p>Ключевые даты подтягиваются из пост-трекера автоматически.</p></div><div className="producer-post-context-summary"><span><b>{summary?.inPost||0}</b><small>в посте</small></span><span className={summary?.atRisk?"risk":""}><b>{summary?.atRisk||0}</b><small>с риском</small></span><span><b>{producerDate(summary?.nextAir)}</b><small>ближайший эфир</small></span></div><button onClick={()=>go("marketing")}>Вся картина →</button></header>
+    <div className="producer-post-series">{series.slice(0,4).map(item=><article key={item.id} className={item.marketingState}><div><span>{item.name}</span><strong>{item.stage}</strong><small>{item.postWork?.nextShift?`Следующая смена ${producerDate(item.postWork.nextShift.day)}`:item.nextMilestone?`Далее: ${item.nextMilestone.label}`:"План поста не заполнен"}</small></div><ProducerMilestoneStrip series={item} compact/><em>{PRODUCER_MARKETING_LABELS[item.marketingState]||item.marketingLabel}</em></article>)}</div>
+  </section>;
+}
+
 function ProducerControlPage({go,refreshKey}){
   const [result,setResult]=useState(null);const [error,setError]=useState("");const [filter,setFilter]=useState("all");
   useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/control").then(data=>alive&&setResult(data)).catch(problem=>alive&&setError(problem.message));return()=>{alive=false;};},[refreshKey]);
@@ -380,6 +399,22 @@ function ProducerControlPage({go,refreshKey}){
     <section className="producer-control-summary"><article className={(summary.overdue||0)?"danger":""}><b>{summary.overdue||0}</b><span>просрочено или отклонено</span></article><article className={(summary.today||0)?"today":""}><b>{summary.today||0}</b><span>нужно сегодня</span></article><article className={(summary.soon||0)?"soon":""}><b>{summary.soon||0}</b><span>в ближайшие 3 дня</span></article><article><b>{summary.upcoming||0}</b><span>дальше в пределах 14 дней</span></article></section>
     <nav className="producer-control-filters" aria-label="Фильтр предупреждений">{filters.map(item=><button className={filter===item.id?"active":""} key={item.id} onClick={()=>setFilter(item.id)}>{item.label}<b>{item.count}</b></button>)}</nav>
     <ProducerControlGroups items={visible} go={go}/>
+  </main>;
+}
+
+function ProducerMarketingPage({go,refreshKey}){
+  const [result,setResult]=useState(null);const [error,setError]=useState("");const [filter,setFilter]=useState("all");
+  useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/marketing").then(data=>alive&&setResult(data)).catch(problem=>alive&&setError(problem.message));return()=>{alive=false;};},[refreshKey]);
+  if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
+  if(!result)return <main className="producer-main"><div className="producer-loading">Собираю даты эфира и готовность материалов…</div></main>;
+  const filters=[{id:"all",label:"Все выпуски"},{id:"prepare",label:"Пора готовить"},{id:"ready",label:"Материал готов"},{id:"risk",label:"Есть риск"},{id:"no-date",label:"Нет даты эфира"}];
+  const projects=(result.projects||[]).map(project=>({...project,series:project.series.filter(series=>filter==="all"||series.marketingState===filter)})).filter(project=>project.series.length);
+  return <main className="producer-main producer-marketing-page">
+    <header className="producer-page-heading producer-marketing-heading"><div><span className="producer-eyebrow">ОБЩАЯ КАРТИНА ЗАПУСКОВ</span><h1>Маркетинг и эфир</h1><p>Когда выходит материал, успевает ли производство и по каким выпускам уже можно начинать продвижение.</p></div><aside><b>Одни данные для всех</b><span>Даты монтажа и сдачи приходят из пост-трекера, эфир видят продюсер и маркетинг.</span></aside></header>
+    <section className="producer-marketing-summary"><article><b>{result.summary.series}</b><span>выпусков в плане</span></article><article><b>{result.summary.nextAir}</b><span>эфиров в ближайшие 14 дней</span></article><article className="ready"><b>{result.summary.ready}</b><span>материал готов</span></article><article className={result.summary.atRisk?"risk":""}><b>{result.summary.atRisk}</b><span>требуют решения</span></article></section>
+    <nav className="producer-marketing-filters" aria-label="Фильтр маркетинговой готовности">{filters.map(item=><button key={item.id} className={filter===item.id?"active":""} onClick={()=>setFilter(item.id)}>{item.label}</button>)}</nav>
+    <div className="producer-marketing-projects">{projects.length?projects.map(project=><section key={project.id} style={{"--project-color":project.color}}><header><i/><div><h2>{project.name}</h2><p>{project.description}</p></div><span><b>{producerDate(project.summary.nextAir)}</b><small>ближайший эфир</small></span><button onClick={()=>go("project",project.id)}>Открыть проект →</button></header><div>{project.series.map(series=><article key={series.id} className={series.marketingState}><div className="producer-marketing-series-name"><span>{String(series.order||1).padStart(2,"0")}</span><div><strong>{series.name}</strong><small>{series.stage}</small></div></div><ProducerMilestoneStrip series={series}/><div className="producer-marketing-verdict"><em>{PRODUCER_MARKETING_LABELS[series.marketingState]||series.marketingLabel}</em><strong>{series.airDate?producerDate(series.airDate)+(series.airTime?` · ${series.airTime}`:""):"Эфир не назначен"}</strong><small>{series.marketingNote}</small></div></article>)}</div></section>):<div className="producer-marketing-empty">По выбранному фильтру выпусков нет.</div>}</div>
+    <p className="producer-marketing-method">{result.methodNote}</p>
   </main>;
 }
 
@@ -486,6 +521,7 @@ function ProducerProjectMap({projectId,people,go,toast}){
     </section>
     <section className="producer-meaning-legend"><strong>Как читать карту</strong><span><i className="project" style={{background:result.project.color}}/>цвет — этот проект</span><span><i className="planned"/>запланировано</span><span><i className="active"/>в работе</span><span><i className="done"/>готово</span><span><i className="paused"/>пауза</span><span><i className="urgent"/>жёлтый и красный — срок</span></section>
     {(result.controlItems||[]).length>0&&<section className="producer-project-control" style={{"--project-color":result.project.color}}><header><div><span className="producer-eyebrow">КОНТРОЛЬ ПРОЕКТА</span><h2>Ближайшие сроки</h2><p>Просроченное и ближайшие 14 дней.</p></div><b>{result.controlItems.length}</b><button onClick={()=>go("control")}>Весь контроль →</button></header><ProducerProjectControlCompact items={result.controlItems} go={go}/></section>}
+    <ProducerPostContext series={result.series} summary={result.postSummary} go={go}/>
     <div className={"producer-project-board"+(compareResult?" has-compare":"")}><div className="producer-project-primary-column"><section className="producer-map-section">
         <div className="producer-map-title"><div><small>ОБЩАЯ ЛИНИЯ</small><h2>Общие этапы</h2></div><span>{producerCount(common.length,"блок","блока","блоков")}</span></div>
         <div className="producer-map-track">{common.length?common.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<common.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map">Добавьте первый общий блок проекта</div>}</div>
@@ -501,13 +537,16 @@ function ProducerProjectMap({projectId,people,go,toast}){
       {compareResult&&<ProducerCompareProject result={compareResult} onClose={()=>setCompareId("")} onOpenProject={()=>go("project",compareResult.project.id)} onOpenBlock={id=>go("block",id)}/>}
     </div>
     {showCreate&&<div className="producer-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false);}}><form className="producer-modal" onSubmit={createBlock}>
-      <div className="producer-modal-head"><div><small>НОВЫЙ ЭТАП</small><h2>Создать блок</h2></div><button type="button" onClick={()=>setShowCreate(false)}>×</button></div>
+      <div className="producer-modal-head"><div><small>НОВЫЙ ЭТАП</small><h2>Создать блок</h2><p>Название — единственное обязательное действие.</p></div><button type="button" onClick={()=>setShowCreate(false)}>×</button></div>
       <label>Название<input autoFocus value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Например, Препродакшн" required/></label>
-      <label>Короткое описание<textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Что должно быть сделано в этом блоке"/></label>
-      <div className="producer-form-row"><label>Серия<select value={form.seriesId} onChange={e=>setForm({...form,seriesId:e.target.value})}><option value="">Общий блок проекта</option>{result.series.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label>Ответственный<select value={form.ownerPersonId} onChange={e=>setForm({...form,ownerPersonId:e.target.value})} required><option value="">Выберите</option>{people.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
-      <div className="producer-form-row"><label>Начало<ProducerDateField label="Дата начала блока" value={form.startDate} onChange={value=>setForm({...form,startDate:value})}/></label><label>Срок<ProducerDateField label="Срок блока" value={form.deadline} onChange={value=>setForm({...form,deadline:value})}/></label></div>
-      <label>Статус<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="planned">Запланировано</option><option value="active">В работе</option><option value="paused">Пауза</option><option value="done">Готово</option></select></label>
+      <div className="producer-template-chips"><span>Быстрый шаблон:</span>{["Препродакшн","Съёмка","Маркетинг","Монтаж серии"].map(name=><button type="button" key={name} onClick={()=>setForm({...form,name})}>{name}</button>)}</div>
+      <details className="producer-create-advanced"><summary>Серия, срок и настройки <span>необязательно</span></summary><div>
+        <label>Короткое описание<textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Что должно быть сделано в этом блоке"/></label>
+        <div className="producer-form-row"><label>Серия<select value={form.seriesId} onChange={e=>setForm({...form,seriesId:e.target.value})}><option value="">Общий блок проекта</option>{result.series.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Ответственный<select value={form.ownerPersonId} onChange={e=>setForm({...form,ownerPersonId:e.target.value})} required><option value="">Выберите</option>{people.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
+        <div className="producer-form-row"><label>Начало<ProducerDateField label="Дата начала блока" value={form.startDate} onChange={value=>setForm({...form,startDate:value})}/></label><label>Срок<ProducerDateField label="Срок блока" value={form.deadline} onChange={value=>setForm({...form,deadline:value})}/></label></div>
+        <label>Статус<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="planned">Запланировано</option><option value="active">В работе</option><option value="paused">Пауза</option><option value="done">Готово</option></select></label>
+      </div></details>
       {error&&<div className="producer-inline-error">{error}</div>}
       <div className="producer-modal-actions"><button type="button" onClick={()=>setShowCreate(false)}>Отмена</button><button className="producer-primary" disabled={saving}>{saving?"Сохраняю…":"Создать блок"}</button></div>
     </form></div>}
@@ -522,7 +561,7 @@ function ProducerTaskRow({task,people,groups,onChange,onOpen}){
   async function update(patch){setBusy(true);try{await onChange(task.id,patch);}catch(error){}finally{setBusy(false);}}
   async function save(event){event.preventDefault();setBusy(true);try{await onChange(task.id,{...draft,groupId:draft.groupId||null,responsiblePersonId:draft.responsiblePersonId||null,deadline:draft.deadline||null});setEditing(false);}catch(error){}finally{setBusy(false);}}
   const dueState=producerDueState(task.deadline,task.completed);
-  return <div id={"producer-task-"+task.id} className={"producer-task-item due-"+dueState+(task.completed?" complete":"")+(busy?" busy":"")}>
+  return <div id={"producer-task-"+task.id} draggable={!editing&&!busy} onDragStart={event=>{event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/producer-task",task.id);}} className={"producer-task-item due-"+dueState+(task.completed?" complete":"")+(busy?" busy":"")}>
     <div className="producer-task-row">
       <label className="producer-check" title={task.completed?"Вернуть в работу":"Отметить выполненной"}><input aria-label={task.completed?"Вернуть задачу в работу":"Выполнить задачу"} type="checkbox" checked={task.completed} onChange={e=>update({completed:e.target.checked})}/><span>✓</span></label>
       <button className="producer-task-copy" onClick={()=>onOpen(task.id)}><strong>{task.title}</strong><small>{task.responsibleName?"Ответственный: "+task.responsibleName:"Без отдельного ответственного"}</small>{task.internalComment&&<em title={task.internalComment}>◌ {task.internalComment}</em>}</button>
@@ -551,10 +590,8 @@ function ProducerQuickTask({groupId,people,onCreate}){
   async function submit(event){event.preventDefault();if(!title.trim()||!assignee)return;setBusy(true);try{await onCreate({title,internalComment:comment,groupId:groupId||null,assigneePersonId:assignee});setTitle("");setComment("");setOpen(false);}catch(error){}finally{setBusy(false);}}
   if(!open)return <button className="producer-quick-task-open" onClick={()=>setOpen(true)}>＋ Добавить задачу</button>;
   return <form className="producer-quick-task" onSubmit={submit}>
-    <input autoFocus aria-label="Название новой задачи" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Что нужно сделать?" required/>
-    <input aria-label="Внутренний комментарий новой задачи" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Комментарий (необязательно)"/>
-    <select aria-label="Исполнитель новой задачи" value={assignee} onChange={e=>setAssignee(e.target.value)} required><option value="">Исполнитель</option>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select>
-    <button className="producer-primary" disabled={busy}>{busy?"…":"Добавить"}</button><button type="button" onClick={()=>{setOpen(false);setTitle("");setComment("");}}>Отмена</button>
+    <div className="producer-quick-task-line"><input autoFocus aria-label="Название новой задачи" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Напишите задачу и нажмите Enter" required/><button className="producer-primary" disabled={busy||!title.trim()}>{busy?"…":"Добавить"}</button><button type="button" onClick={()=>{setOpen(false);setTitle("");setComment("");}}>×</button></div>
+    <details><summary>Комментарий и исполнитель <span>необязательно</span></summary><div><input aria-label="Внутренний комментарий новой задачи" value={comment} onChange={e=>setComment(e.target.value)} placeholder="Внутренний комментарий"/><select aria-label="Исполнитель новой задачи" value={assignee} onChange={e=>setAssignee(e.target.value)} required><option value="">Исполнитель</option>{people.map(person=><option key={person.id} value={person.id}>{person.name}</option>)}</select></div></details>
   </form>;
 }
 
@@ -658,6 +695,11 @@ function ProducerBlockPage({blockId,go,toast}){
     target.classList.add("producer-focus-flash");
     window.setTimeout(()=>target.classList.remove("producer-focus-flash"),1800);
   }
+  function dropTask(event,groupId){
+    event.preventDefault();
+    const taskId=event.dataTransfer.getData("text/producer-task");
+    if(taskId)updateTask(taskId,{groupId:groupId||null});
+  }
   if(!result)return <main className="producer-main">{error?<div className="producer-error">{error}</div>:<div className="producer-loading">Открываю блок…</div>}</main>;
   const {block,project,series,seriesOptions,groups,tasks,approvals=[],warnings=[],people,history,permissions={}}=result;
   const ungrouped=tasks.filter(task=>!task.groupId);
@@ -671,12 +713,12 @@ function ProducerBlockPage({blockId,go,toast}){
     <section className="producer-block-layout"><div className="producer-task-area">
       <ProducerWarnings warnings={warnings} onFocus={focusWarning}/>
       <div className="producer-section-head"><div><span className="producer-eyebrow">РАБОТА</span><h2>Задачи блока</h2></div><b>{block.completedTasks} из {block.totalTasks}</b></div>
-      {groups.map(group=>{const rows=tasks.filter(task=>task.groupId===group.id);return <article className="producer-task-group" key={group.id}>
+      {groups.map(group=>{const rows=tasks.filter(task=>task.groupId===group.id);return <article className="producer-task-group" key={group.id} onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="move";}} onDrop={event=>dropTask(event,group.id)}>
         <ProducerGroupHeader group={group} done={rows.filter(t=>t.completed).length} total={rows.length} onRename={renameGroup} onDelete={deleteGroup}/>
         {rows.length?rows.map(task=><ProducerTaskRow key={task.id} task={task} people={people} groups={groups} onChange={updateTask} onOpen={id=>go("task",id)}/>):<p>В группе пока нет задач</p>}
         <ProducerQuickTask groupId={group.id} people={people} onCreate={addTask}/>
       </article>})}
-      <article className="producer-task-group producer-ungrouped"><div className="producer-group-head"><h3>Без группы<span>{ungrouped.filter(t=>t.completed).length}/{ungrouped.length}</span></h3></div>
+      <article className="producer-task-group producer-ungrouped" onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="move";}} onDrop={event=>dropTask(event,null)}><div className="producer-group-head"><h3>Без группы<span>{ungrouped.filter(t=>t.completed).length}/{ungrouped.length}</span></h3></div>
         {ungrouped.length?ungrouped.map(task=><ProducerTaskRow key={task.id} task={task} people={people} groups={groups} onChange={updateTask} onOpen={id=>go("task",id)}/>):<p>Сюда попадут задачи без группы и задачи из удалённых групп.</p>}
         <ProducerQuickTask groupId={null} people={people} onCreate={addTask}/>
       </article>
@@ -769,7 +811,7 @@ function ProducerWorkspace({user,data,onExit}){
   const [refreshKey,setRefreshKey]=useState(0);
   useEffect(()=>{const update=()=>setScreen(producerInitialScreen());window.addEventListener("hashchange",update);return()=>window.removeEventListener("hashchange",update);},[]);
   function go(type,id){
-    const staticSection=["dashboard","my-work","projects","calendar","control","team","analytics","history"].includes(type);
+    const staticSection=["dashboard","my-work","projects","marketing","calendar","control","team","analytics","history"].includes(type);
     const next={type,id:staticSection?"":id};
     setScreen(next);
     window.location.hash=type==="dashboard"?"producer":staticSection?`producer/${type}`:`producer/${type}/${encodeURIComponent(id)}`;
@@ -780,6 +822,7 @@ function ProducerWorkspace({user,data,onExit}){
     {screen.type==="dashboard"&&<ProducerDashboard go={go} refreshKey={refreshKey} user={user} toast={toast}/>}
     {screen.type==="my-work"&&<ProducerMyWorkPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="projects"&&<ProducerProjectsPage go={go} refreshKey={refreshKey} toast={toast}/>}
+    {screen.type==="marketing"&&<ProducerMarketingPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="calendar"&&<ProducerCalendarPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="control"&&<ProducerControlPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="team"&&<ProducerTeamPage go={go} refreshKey={refreshKey}/>}

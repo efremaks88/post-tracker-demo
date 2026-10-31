@@ -51,6 +51,7 @@ async function request(url,method='GET',body,user=1,extraHeaders={}){
 const project=(id='p')=>({id,name:'Проект '+id,color:'#3b82f6',managers:[]});
 const series=(id='s',projectId='p')=>({id,name:'С01',projectId,airDay:0});
 const task=(id=1,projectId='p')=>({id,project:projectId,status:'монтаж',day:'11.10.2026',from:10.5,to:18,person:'Тест'});
+function testDay(offset,legacy=false){const date=new Date();date.setHours(12,0,0,0);date.setDate(date.getDate()+offset);const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return legacy?`${day}.${month}.${year}`:`${year}-${month}-${day}`;}
 async function fixture(){
   await request('/api/data/project','POST',project('p'));await request('/api/data/project','POST',project('other'));
   await request('/api/data/series','POST',series());await request('/api/data/task','POST',task());
@@ -308,15 +309,15 @@ test('D2.6 team profiles expose concrete work, persist self-authored highlights 
   await request('/api/data/person','POST',{id:'producer-a',name:'Продюсер А',login:'user1',roles:['продюсер']});
   await request('/api/data/person','POST',{id:'producer-manager',name:'Пользователь 3',login:'user3',roles:['продюсер']});
   const blockId=(await request('/api/producer/projects/p/blocks','POST',{
-    name:'Производство',ownerPersonId:'producer-a',startDate:'2026-10-01',deadline:'2026-10-30',status:'active',
+    name:'Производство',ownerPersonId:'producer-a',startDate:testDay(-5),deadline:testDay(20),status:'active',
   })).body.id;
   await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
-    title:'Подготовить съёмочный план',assigneePersonId:'producer-a',deadline:'2026-10-20',
+    title:'Подготовить съёмочный план',assigneePersonId:'producer-a',deadline:testDay(2),
   });
   await request('/api/producer/blocks/'+blockId+'/tasks','POST',{
-    title:'Утвердить смету',assigneePersonId:'producer-manager',deadline:'2026-10-22',
+    title:'Утвердить смету',assigneePersonId:'producer-manager',deadline:testDay(3),
   });
-  await request('/api/data/task','POST',{id:7001,project:'p',seriesId:'s',series:'С01',status:'монтаж',day:'20.10.2026',from:10,to:18,person:'Продюсер А',note:'Сборка выпуска'});
+  await request('/api/data/task','POST',{id:7001,project:'p',seriesId:'s',series:'С01',status:'монтаж',day:testDay(1,true),from:10,to:18,person:'Продюсер А',note:'Сборка выпуска'});
 
   const team=await request('/api/producer/team');
   assert.equal(team.status,200);
@@ -342,6 +343,19 @@ test('D2.6 team profiles expose concrete work, persist self-authored highlights 
   assert.equal(projectAnalytics.totalTasks,2);assert.equal(projectAnalytics.completedTasks,0);
   assert.equal(projectAnalytics.forecastSource,'plan');assert.ok(projectAnalytics.forecastTotalDays>0);
   assert.match(analytics.body.methodNote,/Прогноз/);
+});
+test('marketing view reuses post milestones and project map exposes the same production context',async()=>{
+  await fixture();
+  await request('/api/data/series','POST',{...series(),editStart:testDay(-1,true),preOtkDate:testDay(5,true),otkDate:testDay(7,true),sendDate:testDay(9,true),airDate:testDay(12,true),airTime:'21:00'});
+  await request('/api/data/task','POST',{id:7101,project:'p',seriesId:'s',series:'С01',status:'монтаж',day:testDay(1,true),from:10,to:18,person:'Тест',note:'Первый монтаж'});
+  const marketing=await request('/api/producer/marketing');
+  assert.equal(marketing.status,200);assert.equal(marketing.body.summary.series,1);
+  const episode=marketing.body.projects[0].series[0];
+  assert.equal(episode.airDate,testDay(12));assert.equal(episode.stageKey,'editing');
+  assert.ok(episode.milestones.some(item=>item.key==='premaster'));
+  assert.equal(episode.postWork.nextShift.status,'монтаж');
+  const map=await request('/api/producer/projects/p');
+  assert.equal(map.body.series[0].airDate,episode.airDate);assert.equal(map.body.postSummary.nextAir,episode.airDate);
 });
 test('individual project/series/task writes commit and are visible to a subsequent load',async()=>{
   assert.equal((await request('/api/data/project','POST',project())).status,200);
