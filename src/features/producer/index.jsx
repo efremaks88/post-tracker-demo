@@ -76,6 +76,19 @@ function ProducerProjectArt({project}){
 }
 
 function ProducerWeatherDoodle(){
+  const [temperature,setTemperature]=useState(11);
+  const today=new Date();
+  const dateLabel=today.toLocaleDateString("ru-RU",{day:"numeric",month:"long"});
+  useEffect(()=>{
+    let alive=true;
+    const url="https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6176&current=temperature_2m&timezone=Europe%2FMoscow";
+    fetch(url).then(response=>response.ok?response.json():Promise.reject(new Error("weather unavailable"))).then(data=>{
+      const value=Number(data?.current?.temperature_2m);
+      if(alive&&Number.isFinite(value))setTemperature(Math.round(value));
+    }).catch(()=>{});
+    return()=>{alive=false;};
+  },[]);
+  const temperatureLabel=(temperature>0?"+":"")+temperature;
   return <div className="producer-weather-doodle" aria-label="Сегодня хороший день для работы">
     <svg viewBox="0 0 118 94" role="img" aria-label="Рисованное улыбающееся солнце">
       <g className="producer-sun-rays">
@@ -87,7 +100,7 @@ function ProducerWeatherDoodle(){
         <path className="producer-sun-smile" d="M46 55c7 8 17 8 24 0"/>
       </g>
     </svg>
-    <span><b>Сегодня — хороший день</b><small>для больших историй</small></span>
+    <span><b>{dateLabel} · {temperatureLabel} градусов</b><small>Сегодня — хороший день</small></span>
   </div>;
 }
 
@@ -153,12 +166,10 @@ function ProducerShell({user,onExit,children,onHome,screen,go}){
         <button className={["projects","project","block"].includes(screen.type)?"active":""} onClick={()=>go("projects")}>Проекты</button>
         <button className={screen.type==="marketing"?"active":""} onClick={()=>go("marketing")}>Маркетинг</button>
         <button className={screen.type==="calendar"?"active":""} onClick={()=>go("calendar")}>Календарь</button>
-        <details className={["control","team","person","analytics","history"].includes(screen.type)?"active":""}><summary>Ещё</summary><div>
-          <button className={screen.type==="control"?"active":""} onClick={()=>go("control")}>Контроль сроков</button>
-          <button className={["team","person"].includes(screen.type)?"active":""} onClick={()=>go("team")}>Команда</button>
-          <button className={screen.type==="analytics"?"active":""} onClick={()=>go("analytics")}>Аналитика</button>
-          <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
-        </div></details>
+        <button className={screen.type==="control"?"active":""} onClick={()=>go("control")}>Сроки</button>
+        <button className={["team","person"].includes(screen.type)?"active":""} onClick={()=>go("team")}>Команда</button>
+        <button className={screen.type==="analytics"?"active":""} onClick={()=>go("analytics")}>Аналитика</button>
+        <button className={screen.type==="history"?"active":""} onClick={()=>go("history")}>История</button>
       </nav>
       <div className="producer-user"><button onClick={onExit}>Постпродакшн</button><ProducerAvatar person={{id:"local-demo-producer",name:user.display_name}} size="small"/><span>{user.display_name}</span><b>{user.role}</b></div>
     </header>
@@ -170,9 +181,8 @@ function ProducerShell({user,onExit,children,onHome,screen,go}){
 const PRODUCER_STATUS_LABELS={"в работе":"В работе","постпродакшн":"В посте","съёмка":"На съёмке","подготовка":"В подготовке"};
 
 function ProducerProjectCard({project,go}){
-  const [expanded,setExpanded]=useState(false);
-  return <article className={"producer-project-preview"+(expanded?" expanded":"")} style={{"--project-color":project.color}}>
-    <button className="producer-project-preview-main" onClick={()=>setExpanded(value=>!value)} onDoubleClick={()=>go("project",project.id)}>
+  return <article className="producer-project-preview" style={{"--project-color":project.color}} role="button" tabIndex="0" onClick={()=>go("project",project.id)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")go("project",project.id);}}>
+    <button className="producer-project-preview-main" aria-label={"Открыть проект "+project.name} onClick={event=>{event.stopPropagation();go("project",project.id);}}>
       <ProducerProjectArt project={project}/>
       <span className="producer-project-stage">● {PRODUCER_STATUS_LABELS[project.status]||project.status||"В работе"}</span>
       {project.warningCount>0&&<span className="producer-project-alert">! {project.warningCount}</span>}
@@ -186,7 +196,6 @@ function ProducerProjectCard({project,go}){
         <span className="producer-project-deadline"><small>{PRODUCER_STATUS_LABELS[project.status]||project.status||"В работе"}</small><strong>до {producerDate(project.nextDeadline)}</strong></span>
       </div>
     </div>
-    {expanded&&<div className="producer-project-preview-detail"><span>{project.completedTasks} из {producerCount(project.totalTasks,"задачи","задач","задач")} готовы</span><button onClick={()=>go("project",project.id)}>Открыть карту проекта →</button></div>}
   </article>;
 }
 
@@ -222,6 +231,7 @@ function ProducerDashboard({go,refreshKey,user,toast}){
   const [error,setError]=useState("");
   const [openAttention,setOpenAttention]=useState("");
   const [creatingProject,setCreatingProject]=useState(false);
+  const projectRail=useRef(null);
   useEffect(()=>{let alive=true;setError("");producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error&&!result)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю продюсерскую…</div></main>;
@@ -237,8 +247,8 @@ function ProducerDashboard({go,refreshKey,user,toast}){
       <ProducerWeatherDoodle/>
     </section>
     <section className="producer-home-projects">
-      <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><span className="producer-project-heading-actions"><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button><button onClick={()=>go("projects")}>Смотреть все →</button></span></header>
-      <div className="producer-project-preview-grid">{result.projects.slice(0,3).map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>
+      <header className="producer-clean-heading"><div><h2>Проекты в работе</h2><p>{Object.entries(statuses).map(([label,count])=>`${count} ${label.toLowerCase()}`).join(" · ")}</p></div><span className="producer-project-heading-actions"><span className="producer-project-rail-buttons"><button aria-label="Пролистать проекты назад" onClick={()=>projectRail.current?.scrollBy({left:-520,behavior:"smooth"})}>←</button><button aria-label="Пролистать проекты вперёд" onClick={()=>projectRail.current?.scrollBy({left:520,behavior:"smooth"})}>→</button></span><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button><button onClick={()=>go("projects")}>Все проекты →</button></span></header>
+      <div className="producer-project-preview-rail" ref={projectRail}>{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>
     </section>
     <section className="producer-home-columns">
       <article className="producer-clean-list producer-today-list">
@@ -271,7 +281,7 @@ function ProducerProjectsPage({go,refreshKey,toast}){
   useEffect(()=>{let alive=true;producerRequest("/api/producer/dashboard").then(data=>alive&&setResult(data)).catch(e=>alive&&setError(e.message));return()=>{alive=false;};},[refreshKey]);
   if(error)return <main className="producer-main"><div className="producer-error">{error}</div></main>;
   if(!result)return <main className="producer-main"><div className="producer-loading">Загружаю проекты…</div></main>;
-  return <main className="producer-main producer-directory-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ВСЕ ПРОЕКТЫ</span><h1>Проекты</h1><p>Один щелчок показывает детали, двойной открывает карту проекта.</p></div><span className="producer-directory-actions"><b>{result.projects.length} в работе</b><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button></span></header><div className="producer-project-directory">{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>{creatingProject&&<ProducerCreateProjectModal onClose={()=>setCreatingProject(false)} onCreated={created=>{setCreatingProject(false);toast("Проект «"+created.name+"» создан");go("project",created.id);}}/>}</main>;
+  return <main className="producer-main producer-directory-page"><header className="producer-page-heading"><div><span className="producer-eyebrow">ВСЕ ПРОЕКТЫ</span><h1>Проекты</h1><p>Нажмите на карточку, чтобы открыть карту проекта.</p></div><span className="producer-directory-actions"><b>{result.projects.length} в работе</b><button className="producer-create-project-button" onClick={()=>setCreatingProject(true)}>＋ Создать проект</button></span></header><div className="producer-project-directory">{result.projects.map(project=><ProducerProjectCard key={project.id} project={project} go={go}/>)}</div>{creatingProject&&<ProducerCreateProjectModal onClose={()=>setCreatingProject(false)} onCreated={created=>{setCreatingProject(false);toast("Проект «"+created.name+"» создан");go("project",created.id);}}/>}</main>;
 }
 
 function producerMonthStart(date){return new Date(date.getFullYear(),date.getMonth(),1,12);}
@@ -350,32 +360,35 @@ function ProducerControlGroups({items,go,withinProject=false}){
 }
 
 function ProducerProjectControlCompact({items,go}){
+  const [expandedBlocks,setExpandedBlocks]=useState(()=>new Set());
   const blocks=[];
   (items||[]).forEach(item=>{
     let block=blocks.find(row=>row.id===item.blockId);
     if(!block){block={id:item.blockId,name:item.blockName,items:[]};blocks.push(block);}
     block.items.push(item);
   });
-  return <div className="producer-project-control-compact">{blocks.map(block=><section key={block.id}>
+  function toggle(blockId){setExpandedBlocks(current=>{const next=new Set(current);next.has(blockId)?next.delete(blockId):next.add(blockId);return next;});}
+  return <div className="producer-project-control-compact">{blocks.map(block=>{const expanded=expandedBlocks.has(block.id);const visible=expanded?block.items:block.items.slice(0,2);return <section key={block.id}>
     <header><button onClick={()=>go("block",block.id)}><span>БЛОК</span><strong>{block.name}</strong></button><b>{block.items.length}</b></header>
-    <div>{block.items.map(item=><button className={`producer-project-control-row ${item.severity} state-${item.state}`} key={item.id} onClick={()=>producerOpenControlItem(item,go)}>
+    <div>{visible.map(item=><button className={`producer-project-control-row ${item.severity} state-${item.state}`} key={item.id} onClick={()=>producerOpenControlItem(item,go)}>
       <span className="producer-control-state">{item.severity==="high"?"!":item.kind==="approval"?"✓":"•"}</span>
       <span><em>{PRODUCER_CONTROL_LABELS[item.state]||item.reason}</em><strong>{item.title}</strong></span>
       <time>{producerDate(item.deadline)}<small>{producerRelativeDue(item.deadline)}</small></time>
-    </button>)}</div>
-  </section>)}</div>;
+    </button>)}{block.items.length>2&&<button className="producer-project-control-more" onClick={()=>toggle(block.id)}>{expanded?"Свернуть":`Ещё ${block.items.length-2}`} {expanded?"↑":"↓"}</button>}</div>
+  </section>;})}</div>;
 }
 
 const PRODUCER_MARKETING_LABELS={"no-date":"Нет даты",early:"Рано",prepare:"Готовить запуск",ready:"Материал готов",risk:"Риск",aired:"В эфире"};
 
 function ProducerMilestoneStrip({series,compact=false}){
   const milestones=series.milestones||[];
-  return <div className={"producer-milestone-strip"+(compact?" compact":"")}>{milestones.length?milestones.map(item=><span key={item.key} className={item.date&&item.date<=new Date().toISOString().slice(0,10)?"passed":""}><i/><small>{item.label}</small><b>{producerDate(item.date)}</b></span>):<p>Ключевые даты ещё не заполнены в пост-трекере.</p>}</div>;
+  return <div className={"producer-milestone-strip"+(compact?" compact":"")}>{milestones.length?milestones.map(item=><span title={`${item.label}: ${producerDate(item.date)}`} key={item.key} className={item.date&&item.date<=new Date().toISOString().slice(0,10)?"passed":""}><i/><small>{item.label}</small><b>{producerDate(item.date)}</b></span>):<p>Ключевые даты ещё не заполнены в пост-трекере.</p>}</div>;
 }
 
-function ProducerPostContext({series,summary,go}){
+function ProducerPostContext({series,summary,go,onOpenPostGantt}){
   if(!(series||[]).length)return null;
-  return <section className="producer-post-context"><header><div><span className="producer-eyebrow">КОНТЕКСТ ИЗ ПОСТА</span><h2>Монтаж и эфир</h2><p>Ключевые даты подтягиваются из пост-трекера автоматически.</p></div><div className="producer-post-context-summary"><span><b>{summary?.inPost||0}</b><small>в посте</small></span><span className={summary?.atRisk?"risk":""}><b>{summary?.atRisk||0}</b><small>с риском</small></span><span><b>{producerDate(summary?.nextAir)}</b><small>ближайший эфир</small></span></div><button onClick={()=>go("marketing")}>Вся картина →</button></header>
+  const ganttDay=series.map(item=>item.nextMilestone?.date||item.editStart).filter(Boolean).sort()[0]||null;
+  return <section className="producer-post-context"><header><div><span className="producer-eyebrow">КОНТЕКСТ ИЗ ПОСТА</span><h2>Монтаж и эфир</h2><p>Ключевые даты подтягиваются из пост-трекера автоматически.</p></div><div className="producer-post-context-summary"><span><b>{summary?.inPost||0}</b><small>в посте</small></span><span className={summary?.atRisk?"risk":""}><b>{summary?.atRisk||0}</b><small>с риском</small></span><span><b>{producerDate(summary?.nextAir)}</b><small>ближайший эфир</small></span></div><div className="producer-post-context-actions"><button onClick={()=>go("marketing")}>Вся картина →</button>{onOpenPostGantt&&<button className="primary" onClick={()=>onOpenPostGantt(series[0].projectId,ganttDay)}>Открыть гант поста →</button>}</div></header>
     <div className="producer-post-series">{series.slice(0,4).map(item=><article key={item.id} className={item.marketingState}><div><span>{item.name}</span><strong>{item.stage}</strong><small>{item.postWork?.nextShift?`Следующая смена ${producerDate(item.postWork.nextShift.day)}`:item.nextMilestone?`Далее: ${item.nextMilestone.label}`:"План поста не заполнен"}</small></div><ProducerMilestoneStrip series={item} compact/><em>{PRODUCER_MARKETING_LABELS[item.marketingState]||item.marketingLabel}</em></article>)}</div>
   </section>;
 }
@@ -489,7 +502,7 @@ function ProducerCompareProject({result,onClose,onOpenProject,onOpenBlock}){
   </aside>;
 }
 
-function ProducerProjectMap({projectId,people,go,toast}){
+function ProducerProjectMap({projectId,people,go,toast,onOpenPostGantt}){
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
   const [showCreate,setShowCreate]=useState(false);
@@ -521,7 +534,7 @@ function ProducerProjectMap({projectId,people,go,toast}){
     </section>
     <section className="producer-meaning-legend"><strong>Как читать карту</strong><span><i className="project" style={{background:result.project.color}}/>цвет — этот проект</span><span><i className="planned"/>запланировано</span><span><i className="active"/>в работе</span><span><i className="done"/>готово</span><span><i className="paused"/>пауза</span><span><i className="urgent"/>жёлтый и красный — срок</span></section>
     {(result.controlItems||[]).length>0&&<section className="producer-project-control" style={{"--project-color":result.project.color}}><header><div><span className="producer-eyebrow">КОНТРОЛЬ ПРОЕКТА</span><h2>Ближайшие сроки</h2><p>Просроченное и ближайшие 14 дней.</p></div><b>{result.controlItems.length}</b><button onClick={()=>go("control")}>Весь контроль →</button></header><ProducerProjectControlCompact items={result.controlItems} go={go}/></section>}
-    <ProducerPostContext series={result.series} summary={result.postSummary} go={go}/>
+    <ProducerPostContext series={result.series} summary={result.postSummary} go={go} onOpenPostGantt={onOpenPostGantt}/>
     <div className={"producer-project-board"+(compareResult?" has-compare":"")}><div className="producer-project-primary-column"><section className="producer-map-section">
         <div className="producer-map-title"><div><small>ОБЩАЯ ЛИНИЯ</small><h2>Общие этапы</h2></div><span>{producerCount(common.length,"блок","блока","блоков")}</span></div>
         <div className="producer-map-track">{common.length?common.map((block,index)=><React.Fragment key={block.id}><ProducerBlockNode block={block} onOpen={id=>go("block",id)}/>{index<common.length-1&&<i className="producer-map-connector"/>}</React.Fragment>):<div className="producer-empty-map">Добавьте первый общий блок проекта</div>}</div>
@@ -805,7 +818,7 @@ function ProducerAnalyticsPage({go,refreshKey}){
   </main>;
 }
 
-function ProducerWorkspace({user,data,onExit}){
+function ProducerWorkspace({user,data,onExit,onOpenPostGantt}){
   const [screen,setScreen]=useState(()=>producerInitialScreen());
   const [toastMessage,setToastMessage]=useState("");
   const [refreshKey,setRefreshKey]=useState(0);
@@ -828,8 +841,8 @@ function ProducerWorkspace({user,data,onExit}){
     {screen.type==="team"&&<ProducerTeamPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="analytics"&&<ProducerAnalyticsPage go={go} refreshKey={refreshKey}/>}
     {screen.type==="history"&&<ProducerHistoryPage refreshKey={refreshKey}/>}
-    {screen.type==="project"&&<ProducerProjectMap projectId={screen.id} people={data.people||[]} go={go} toast={toast}/>} 
-    {screen.type==="block"&&<ProducerBlockPage blockId={screen.id} go={go} toast={toast}/>} 
+    {screen.type==="project"&&<ProducerProjectMap projectId={screen.id} people={data.people||[]} go={go} toast={toast} onOpenPostGantt={onOpenPostGantt}/>}
+    {screen.type==="block"&&<ProducerBlockPage blockId={screen.id} go={go} toast={toast}/>}
     {screen.type==="task"&&<ProducerTaskPage taskId={screen.id} go={go} refreshKey={refreshKey} toast={toast}/>}
     {screen.type==="person"&&<ProducerPersonPage personId={screen.id} go={go} refreshKey={refreshKey} toast={toast}/>}
     <ProducerToast message={toastMessage}/>

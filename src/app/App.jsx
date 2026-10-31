@@ -414,6 +414,13 @@ function App(){
       setWorkspace("post");
       history.pushState(null,"",location.pathname+location.search);
       setNavState(null);
+    }} onOpenPostGantt={(projectId,day)=>{
+      if(projectId)sessionStorage.setItem("ganttFocusProject",projectId);
+      setGanttDay(day||null);
+      setView("gantt");
+      setWorkspace("post");
+      history.pushState(null,"",location.pathname+location.search);
+      setNavState(null);
     }}/>;
   }
 

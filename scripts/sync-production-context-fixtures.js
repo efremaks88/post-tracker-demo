@@ -31,28 +31,143 @@ function iso(value) {
 const today = '2026-10-31';
 const diff = day => day ? Math.round((new Date(day+'T12:00:00')-new Date(today+'T12:00:00'))/86400000) : null;
 
-function shiftLegacyProducerPlan(value) {
-  if (typeof value === 'string' && /^2026-10-(1[7-9]|2\d|30)$/.test(value)) {
-    const date = new Date(value + 'T12:00:00');
-    date.setDate(date.getDate() + 13);
-    return date.toISOString().slice(0,10);
-  }
-  if (Array.isArray(value)) return value.map(shiftLegacyProducerPlan);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,shiftLegacyProducerPlan(item)]));
-  return value;
+// Keep the static Pages demo anchored to one explicit production week.  The old
+// migration shifted every October date by 13 days on every run, so the text
+// could still say «просрочено» while the date was already in the future.  ID maps make
+// the fixture sync repeatable and keep labels, counters and dates in agreement.
+const producerTaskDeadlines = {
+  'demo-pt-stage-contract':'2026-10-30',
+  'demo-pt-factory-budget':'2026-10-30',
+  'demo-pt-science-expert':'2026-10-29',
+  'demo-pt-exp-tickets':'2026-10-31',
+  'demo-pt-north-draft':'2026-10-31',
+  'demo-pt-city-topic':'2026-10-31',
+  'demo-pt-home-structure':'2026-10-31',
+  'demo-pt-stage-call':'2026-10-31',
+  'demo-pt-factory-legal':'2026-10-31',
+  'demo-pt-home-archive':'2026-11-01',
+  'demo-pt-city-guest':'2026-11-01',
+  'demo-pt-north-location':'2026-11-01',
+  'demo-pt-stage-questions':'2026-11-01',
+  'demo-pt-exp-permit':'2026-11-01',
+  'demo-pt-north-call':'2026-11-02',
+  'demo-pt-north-crew':'2026-11-02',
+  'demo-pt-exp-gear':'2026-11-02',
+  'demo-pt-science-facts':'2026-11-02',
+  'demo-pt-home-cut':'2026-11-03',
+  'demo-pt-factory-plan':'2026-11-03',
+  'demo-pt-north-equipment':'2026-11-03',
+};
+
+const producerBlockDeadlines = {
+  'demo-pb-factory-contract':'2026-10-30',
+  'demo-pb-science-research':'2026-10-30',
+  'demo-pb-factory-post':'2026-10-31',
+  'demo-pb-city-dev':'2026-11-01',
+  'demo-pb-stage-prep':'2026-11-01',
+  'demo-pb-north-prep':'2026-11-02',
+  'demo-pb-exp-route':'2026-11-02',
+  'demo-pb-home-edit':'2026-11-03',
+  'demo-pb-stage-shoot':'2026-11-04',
+  'demo-pb-north-shoot-01':'2026-11-04',
+  'demo-pb-factory-shoot':'2026-11-05',
+  'demo-pb-science-shoot':'2026-11-06',
+  'demo-pb-city-release':'2026-11-07',
+  'demo-pb-exp-kar':'2026-11-07',
+  'demo-pb-stage-edit':'2026-11-09',
+  'demo-pb-north-shoot-02':'2026-11-09',
+  'demo-pb-home-finish':'2026-11-11',
+  'demo-pb-north-post-01':'2026-11-12',
+  'demo-pb-exp-altai':'2026-11-12',
+};
+
+const producerApprovalDeadlines = {
+  'demo-pa-factory-budget':'2026-10-30',
+  'demo-pa-stage-contract':'2026-10-31',
+  'demo-pa-exp-budget':'2026-11-01',
+  'demo-pa-north-script':'2026-11-01',
+  'demo-pa-north-format':'2026-10-30',
+};
+
+function objectId(value, prefix) {
+  const id = String(value || '');
+  if (id.startsWith(prefix)) return id;
+  const colon = id.indexOf(':');
+  return colon >= 0 && id.slice(colon + 1).startsWith(prefix) ? id.slice(colon + 1) : '';
 }
 
+function normalizeProducerPlan(value) {
+  if (Array.isArray(value)) return value.map(normalizeProducerPlan);
+  if (!value || typeof value !== 'object') return value;
+  const next = Object.fromEntries(Object.entries(value).map(([key,item])=>[key,normalizeProducerPlan(item)]));
+  const approvalId = next.approvalId || objectId(next.id, 'demo-pa-');
+  const taskId = next.taskId || objectId(next.id, 'demo-pt-');
+  const blockId = next.blockId || objectId(next.id, 'demo-pb-');
+  const deadline = (approvalId && producerApprovalDeadlines[approvalId])
+    || (taskId && producerTaskDeadlines[taskId])
+    || (blockId && producerBlockDeadlines[blockId]);
+  if (deadline && Object.prototype.hasOwnProperty.call(next, 'deadline')) next.deadline = deadline;
+  if (deadline && Object.prototype.hasOwnProperty.call(next, 'dueDate')) next.dueDate = deadline;
+  return next;
+}
+
+const normalizedFixtureFiles = [];
 for (const name of ['dashboard.json','my_work.json','control.json','team.json','analytics.json']) {
-  const file = path.join(FIXTURES,name);
-  write(file,shiftLegacyProducerPlan(read(file)));
+  normalizedFixtureFiles.push(path.join(FIXTURES,name));
 }
 for (const directory of ['projects','blocks','tasks','people']) {
   const root = path.join(FIXTURES,directory);
-  for (const name of fs.readdirSync(root).filter(name=>name.endsWith('.json'))) {
-    const file = path.join(root,name);
-    write(file,shiftLegacyProducerPlan(read(file)));
-  }
+  for (const name of fs.readdirSync(root).filter(name=>name.endsWith('.json'))) normalizedFixtureFiles.push(path.join(root,name));
 }
+for (const file of normalizedFixtureFiles) write(file, normalizeProducerPlan(read(file)));
+
+function controlState(day) {
+  const days = diff(day);
+  if (days === null) return null;
+  if (days < 0) return 'overdue';
+  if (days === 0) return 'today';
+  if (days <= 3) return 'soon';
+  if (days <= 14) return 'upcoming';
+  return null;
+}
+
+function controlReason(kind, state) {
+  const labels = {
+    task:{overdue:'Задача просрочена',today:'Срок задачи сегодня',soon:'Срок задачи близко',upcoming:'Задача в ближайшие 14 дней'},
+    block:{overdue:'Блок просрочен',today:'Срок блока сегодня',soon:'Срок блока близко',upcoming:'Срок блока в ближайшие 14 дней'},
+    approval:{overdue:'Согласование просрочено',today:'Согласование нужно сегодня',soon:'Срок согласования близко',upcoming:'Согласование в ближайшие 14 дней'},
+  };
+  return labels[kind]?.[state] || '';
+}
+
+const controlPath = path.join(FIXTURES, 'control.json');
+const control = read(controlPath);
+control.items = control.items.map(item => {
+  const state = controlState(item.deadline);
+  return state ? {...item,state,severity:state==='overdue'?'high':state==='today'||state==='soon'?'medium':'low',reason:controlReason(item.kind,state)} : null;
+}).filter(Boolean).sort((a,b)=>String(a.deadline).localeCompare(String(b.deadline)) || String(a.title).localeCompare(String(b.title),'ru'));
+control.summary = {
+  total:control.items.length,
+  overdue:control.items.filter(item=>item.state==='overdue').length,
+  today:control.items.filter(item=>item.state==='today').length,
+  soon:control.items.filter(item=>item.state==='soon').length,
+  upcoming:control.items.filter(item=>item.state==='upcoming').length,
+  approvals:control.items.filter(item=>item.kind==='approval').length,
+};
+write(controlPath, control);
+
+const dashboardPath = path.join(FIXTURES, 'dashboard.json');
+const dashboard = read(dashboardPath);
+dashboard.attention = control.items.filter(item=>['overdue','today','soon'].includes(item.state));
+dashboard.myTasks = dashboard.myTasks.filter(item=>item.deadline===today);
+dashboard.deadlines = dashboard.deadlines.filter(item=>{const days=diff(item.deadline);return days!==null&&days>=0&&days<=14;}).sort((a,b)=>String(a.deadline).localeCompare(String(b.deadline)));
+dashboard.calendarItems = dashboard.calendarItems.filter(item=>{const days=diff(item.deadline);return days!==null&&days>=-31&&days<=62;}).sort((a,b)=>String(a.deadline).localeCompare(String(b.deadline)));
+dashboard.projects = dashboard.projects.map(project=>{
+  const projectControl = control.items.filter(item=>item.projectId===project.id);
+  const nextDeadline = dashboard.deadlines.filter(item=>item.projectId===project.id).map(item=>item.deadline).sort()[0] || project.nextDeadline;
+  return {...project,nextDeadline,warningCount:projectControl.filter(item=>['overdue','today','soon'].includes(item.state)).length};
+});
+write(dashboardPath, dashboard);
 
 function enrich(series, tasks) {
   const config = schedule[series.id] || {};
@@ -97,6 +212,7 @@ for (const project of projects) {
   if (!fs.existsSync(file)) continue;
   const page = read(file);
   page.series = project.series;
+  page.controlItems = control.items.filter(item=>item.projectId===project.id);
   page.postSummary = {totalSeries:project.series.length,inPost:project.series.filter(item=>['editing','premaster','master'].includes(item.stageKey)).length,ready:project.summary.ready,atRisk:project.summary.atRisk,nextAir:project.summary.nextAir};
   write(file,page);
 }

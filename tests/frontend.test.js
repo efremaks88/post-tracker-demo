@@ -12,7 +12,7 @@ const source=readFrontendSource(path.join(__dirname,'..'));
 const names=[...source.matchAll(/^function (\w+)/gm)].map(m=>m[1]);
 const context={React,ReactDOM:{createRoot:()=>({render:()=>{}}),createPortal:x=>x},
   console,document:{getElementById:()=>null,body:{},documentElement:{clientWidth:1280}},
-  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.16.0'}},
+  window:{innerWidth:1280,innerHeight:900,location:{hash:'',pathname:'/',search:''},__TRACKER_RUNTIME__:{mode:'local-demo',label:'DEV · v0.17.0'}},
   location:{hash:'',pathname:'/',search:''},history:{},sessionStorage:{getItem:()=>null,setItem(){}},setTimeout,clearTimeout};
 vm.createContext(context);
 vm.runInContext(babel.transformSync(source,{presets:['@babel/preset-react'],filename:'index.jsx'}).code+
@@ -140,7 +140,7 @@ test('desktop login and mobile show new branding and author credit',()=>{
 });
 test('local build marker is visible in the main interface',()=>{
   const mobile=render('MobileTopbar',shared);
-  assert.ok(mobile.includes('DEV · v0.16.0'));
+  assert.ok(mobile.includes('DEV · v0.17.0'));
   assert.equal(mobile.includes('Выйти'),false);
   assert.ok(source.includes('{RUNTIME.label&&'));
 });
@@ -170,6 +170,9 @@ test('producer counts use correct Russian forms and focused work routes are pres
   assert.ok(source.includes('Мои задачи</button>'));assert.ok(source.includes('/api/producer/my-work'));
   assert.ok(source.includes('Контроль сроков</button>'));assert.ok(source.includes('/api/producer/control'));
   assert.ok(source.includes('Маркетинг</button>'));assert.ok(source.includes('/api/producer/marketing'));
+  assert.ok(source.includes('Сроки</button>'));assert.ok(source.includes('Команда</button>'));assert.ok(source.includes('Аналитика</button>'));assert.ok(source.includes('История</button>'));
+  assert.ok(source.includes('Открыть гант поста'));
+  assert.ok(source.includes('api.open-meteo.com/v1/forecast'));
   assert.ok(source.includes('Напишите задачу и нажмите Enter'));
   assert.ok(source.includes('Подробнее и настройки'));
 });

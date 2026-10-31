@@ -46,6 +46,20 @@ test('Pages demo API loads fixtures and persists a created project', async()=>{
   const dashboard=await dashboardResponse.json();
   assert.equal(dashboard.projects.length,7);
   assert.ok(dashboard.projects.some(project=>project.id==='demo-north'));
+  assert.equal(dashboard.myTasks.length,5);
+  assert.ok(dashboard.myTasks.every(task=>task.deadline==='2026-10-31'));
+  assert.ok(dashboard.deadlines.length>=5,'home deadline list must be populated for the demo week');
+
+  const controlResponse=await window.fetch('/api/producer/control');
+  const control=await controlResponse.json();
+  const demoToday=new Date('2026-10-31T12:00:00');
+  for (const item of control.items) {
+    const days=Math.round((new Date(item.deadline+'T12:00:00')-demoToday)/86400000);
+    if(item.state==='overdue') assert.ok(days<0,`${item.id} must be before the demo date`);
+    if(item.state==='today') assert.equal(days,0,`${item.id} must be on the demo date`);
+    if(item.state==='soon') assert.ok(days>=1&&days<=3,`${item.id} must be due in three days`);
+    if(item.state==='upcoming') assert.ok(days>=4&&days<=14,`${item.id} must be inside the 14-day horizon`);
+  }
 
   const marketingResponse=await window.fetch('/api/producer/marketing');
   const marketing=await marketingResponse.json();

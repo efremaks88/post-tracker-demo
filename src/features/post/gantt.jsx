@@ -14,7 +14,7 @@ function GanttView({data,onUpdate,onBatchUpdate,onSeriesSelect,startDay,onLog,ca
   const [expandedSeries,setExpandedSeries]=useState(new Set());
   const [hoverTask,setHoverTask]=useState(null);
   const [projectOrder,setProjectOrder]=useState(()=>data.ganttOrder||null);
-  const [ganttFilter,setGanttFilter]=useState("");
+  const [ganttFilter,setGanttFilter]=useState(()=>sessionStorage.getItem("ganttFocusProject")||"");
   const [shiftTailMode,setShiftTailMode]=useState(false);
   const [selectedTasks,setSelectedTasks]=useState(new Set());
   const [taskContextMenu,setTaskContextMenu]=useState(null);
@@ -27,6 +27,7 @@ function GanttView({data,onUpdate,onBatchUpdate,onSeriesSelect,startDay,onLog,ca
   const canWriteProject=projectId=>!canEditProjectById||canEditProjectById(projectId);
 
   useEffect(()=>{sessionStorage.setItem("ganttWeek",String(weekOffset));},[weekOffset]);
+  useEffect(()=>{sessionStorage.removeItem("ganttFocusProject");},[]);
 
   useEffect(()=>{
     function h(e){setTaskModal(e.detail||{});}

@@ -4,7 +4,7 @@
   const seed = window.__POST_TRACKER_PAGES_SEED__;
   if (!seed) throw new Error('GitHub Pages demo seed is missing');
 
-  const STORAGE_KEY = 'post_tracker_github_pages_demo_v016';
+  const STORAGE_KEY = 'post_tracker_github_pages_demo_v017';
   const clone = value => JSON.parse(JSON.stringify(value));
   const uid = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
   let state;

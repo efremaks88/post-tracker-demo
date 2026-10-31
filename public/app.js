@@ -7780,7 +7780,7 @@ function GanttView(_ref34) {
     _useState80 = _slicedToArray(_useState79, 2),
     projectOrder = _useState80[0],
     setProjectOrder = _useState80[1];
-  const _useState81 = useState(""),
+  const _useState81 = useState(() => sessionStorage.getItem("ganttFocusProject") || ""),
     _useState82 = _slicedToArray(_useState81, 2),
     ganttFilter = _useState82[0],
     setGanttFilter = _useState82[1];
@@ -7812,6 +7812,9 @@ function GanttView(_ref34) {
   useEffect(() => {
     sessionStorage.setItem("ganttWeek", String(weekOffset));
   }, [weekOffset]);
+  useEffect(() => {
+    sessionStorage.removeItem("ganttFocusProject");
+  }, []);
   useEffect(() => {
     function h(e) {
       setTaskModal(e.detail || {});
@@ -18567,6 +18570,28 @@ function ProducerProjectArt(_ref125) {
   }));
 }
 function ProducerWeatherDoodle() {
+  const _useState197 = useState(11),
+    _useState198 = _slicedToArray(_useState197, 2),
+    temperature = _useState198[0],
+    setTemperature = _useState198[1];
+  const today = new Date();
+  const dateLabel = today.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long"
+  });
+  useEffect(() => {
+    let alive = true;
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=55.7558&longitude=37.6176&current=temperature_2m&timezone=Europe%2FMoscow";
+    fetch(url).then(response => response.ok ? response.json() : Promise.reject(new Error("weather unavailable"))).then(data => {
+      var _data$current;
+      const value = Number(data === null || data === void 0 || (_data$current = data.current) === null || _data$current === void 0 ? void 0 : _data$current.temperature_2m);
+      if (alive && Number.isFinite(value)) setTemperature(Math.round(value));
+    }).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const temperatureLabel = (temperature > 0 ? "+" : "") + temperature;
   return React.createElement("div", {
     className: "producer-weather-doodle",
     "aria-label": "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0434\u0435\u043D\u044C \u0434\u043B\u044F \u0440\u0430\u0431\u043E\u0442\u044B"
@@ -18588,20 +18613,20 @@ function ProducerWeatherDoodle() {
   }), React.createElement("path", {
     className: "producer-sun-smile",
     d: "M46 55c7 8 17 8 24 0"
-  }))), React.createElement("span", null, React.createElement("b", null, "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u2014 \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0434\u0435\u043D\u044C"), React.createElement("small", null, "\u0434\u043B\u044F \u0431\u043E\u043B\u044C\u0448\u0438\u0445 \u0438\u0441\u0442\u043E\u0440\u0438\u0439")));
+  }))), React.createElement("span", null, React.createElement("b", null, dateLabel, " \xB7 ", temperatureLabel, " \u0433\u0440\u0430\u0434\u0443\u0441\u043E\u0432"), React.createElement("small", null, "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u2014 \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0434\u0435\u043D\u044C")));
 }
 function ProducerDateField(_ref126) {
   let value = _ref126.value,
     onChange = _ref126.onChange,
     label = _ref126.label;
-  const _useState197 = useState(() => producerDateInput(value)),
-    _useState198 = _slicedToArray(_useState197, 2),
-    text = _useState198[0],
-    setText = _useState198[1];
-  const _useState199 = useState(false),
+  const _useState199 = useState(() => producerDateInput(value)),
     _useState200 = _slicedToArray(_useState199, 2),
-    invalid = _useState200[0],
-    setInvalid = _useState200[1];
+    text = _useState200[0],
+    setText = _useState200[1];
+  const _useState201 = useState(false),
+    _useState202 = _slicedToArray(_useState201, 2),
+    invalid = _useState202[0],
+    setInvalid = _useState202[1];
   const picker = useRef(null);
   useEffect(() => {
     setText(producerDateInput(value));
@@ -18680,10 +18705,10 @@ function ProducerProgress(_ref128) {
 }
 function ProducerQuickRail(_ref129) {
   let go = _ref129.go;
-  const _useState201 = useState(false),
-    _useState202 = _slicedToArray(_useState201, 2),
-    open = _useState202[0],
-    setOpen = _useState202[1];
+  const _useState203 = useState(false),
+    _useState204 = _slicedToArray(_useState203, 2),
+    open = _useState204[0],
+    setOpen = _useState204[1];
   return React.createElement("aside", {
     className: "producer-quick-rail" + (open ? " open" : "")
   }, open && React.createElement("div", null, React.createElement("strong", null, "\u0411\u044B\u0441\u0442\u0440\u044B\u0439 \u043F\u0435\u0440\u0435\u0445\u043E\u0434"), React.createElement("button", {
@@ -18752,12 +18777,10 @@ function ProducerShell(_ref130) {
   }, "\u041C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433"), React.createElement("button", {
     className: screen.type === "calendar" ? "active" : "",
     onClick: () => go("calendar")
-  }, "\u041A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"), React.createElement("details", {
-    className: ["control", "team", "person", "analytics", "history"].includes(screen.type) ? "active" : ""
-  }, React.createElement("summary", null, "\u0415\u0449\u0451"), React.createElement("div", null, React.createElement("button", {
+  }, "\u041A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C"), React.createElement("button", {
     className: screen.type === "control" ? "active" : "",
     onClick: () => go("control")
-  }, "\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0440\u043E\u043A\u043E\u0432"), React.createElement("button", {
+  }, "\u0421\u0440\u043E\u043A\u0438"), React.createElement("button", {
     className: ["team", "person"].includes(screen.type) ? "active" : "",
     onClick: () => go("team")
   }, "\u041A\u043E\u043C\u0430\u043D\u0434\u0430"), React.createElement("button", {
@@ -18766,7 +18789,7 @@ function ProducerShell(_ref130) {
   }, "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430"), React.createElement("button", {
     className: screen.type === "history" ? "active" : "",
     onClick: () => go("history")
-  }, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F")))), React.createElement("div", {
+  }, "\u0418\u0441\u0442\u043E\u0440\u0438\u044F")), React.createElement("div", {
     className: "producer-user"
   }, React.createElement("button", {
     onClick: onExit
@@ -18789,19 +18812,24 @@ const PRODUCER_STATUS_LABELS = {
 function ProducerProjectCard(_ref131) {
   let project = _ref131.project,
     go = _ref131.go;
-  const _useState203 = useState(false),
-    _useState204 = _slicedToArray(_useState203, 2),
-    expanded = _useState204[0],
-    setExpanded = _useState204[1];
   return React.createElement("article", {
-    className: "producer-project-preview" + (expanded ? " expanded" : ""),
+    className: "producer-project-preview",
     style: {
       "--project-color": project.color
+    },
+    role: "button",
+    tabIndex: "0",
+    onClick: () => go("project", project.id),
+    onKeyDown: event => {
+      if (event.key === "Enter" || event.key === " ") go("project", project.id);
     }
   }, React.createElement("button", {
     className: "producer-project-preview-main",
-    onClick: () => setExpanded(value => !value),
-    onDoubleClick: () => go("project", project.id)
+    "aria-label": "Открыть проект " + project.name,
+    onClick: event => {
+      event.stopPropagation();
+      go("project", project.id);
+    }
   }, React.createElement(ProducerProjectArt, {
     project: project
   }), React.createElement("span", {
@@ -18827,11 +18855,7 @@ function ProducerProjectCard(_ref131) {
     size: "tiny"
   }))), React.createElement("small", null, "\u041A\u043E\u043C\u0430\u043D\u0434\u0430: ", (project.team || []).length)), React.createElement("span", {
     className: "producer-project-deadline"
-  }, React.createElement("small", null, PRODUCER_STATUS_LABELS[project.status] || project.status || "В работе"), React.createElement("strong", null, "\u0434\u043E ", producerDate(project.nextDeadline))))), expanded && React.createElement("div", {
-    className: "producer-project-preview-detail"
-  }, React.createElement("span", null, project.completedTasks, " \u0438\u0437 ", producerCount(project.totalTasks, "задачи", "задач", "задач"), " \u0433\u043E\u0442\u043E\u0432\u044B"), React.createElement("button", {
-    onClick: () => go("project", project.id)
-  }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u0440\u0442\u0443 \u043F\u0440\u043E\u0435\u043A\u0442\u0430 \u2192")));
+  }, React.createElement("small", null, PRODUCER_STATUS_LABELS[project.status] || project.status || "В работе"), React.createElement("strong", null, "\u0434\u043E ", producerDate(project.nextDeadline))))));
 }
 const PRODUCER_PROJECT_COLORS = ["#4f79d8", "#4b8f82", "#a85e7c", "#c18b35", "#c8644b", "#7665b4"];
 function ProducerCreateProjectModal(_ref132) {
@@ -18967,6 +18991,7 @@ function ProducerDashboard(_ref133) {
     _useState218 = _slicedToArray(_useState217, 2),
     creatingProject = _useState218[0],
     setCreatingProject = _useState218[1];
+  const projectRail = useRef(null);
   useEffect(() => {
     let alive = true;
     setError("");
@@ -19024,14 +19049,35 @@ function ProducerDashboard(_ref133) {
     return `${count} ${label.toLowerCase()}`;
   }).join(" · "))), React.createElement("span", {
     className: "producer-project-heading-actions"
+  }, React.createElement("span", {
+    className: "producer-project-rail-buttons"
   }, React.createElement("button", {
+    "aria-label": "\u041F\u0440\u043E\u043B\u0438\u0441\u0442\u0430\u0442\u044C \u043F\u0440\u043E\u0435\u043A\u0442\u044B \u043D\u0430\u0437\u0430\u0434",
+    onClick: () => {
+      var _projectRail$current;
+      return (_projectRail$current = projectRail.current) === null || _projectRail$current === void 0 ? void 0 : _projectRail$current.scrollBy({
+        left: -520,
+        behavior: "smooth"
+      });
+    }
+  }, "\u2190"), React.createElement("button", {
+    "aria-label": "\u041F\u0440\u043E\u043B\u0438\u0441\u0442\u0430\u0442\u044C \u043F\u0440\u043E\u0435\u043A\u0442\u044B \u0432\u043F\u0435\u0440\u0451\u0434",
+    onClick: () => {
+      var _projectRail$current2;
+      return (_projectRail$current2 = projectRail.current) === null || _projectRail$current2 === void 0 ? void 0 : _projectRail$current2.scrollBy({
+        left: 520,
+        behavior: "smooth"
+      });
+    }
+  }, "\u2192")), React.createElement("button", {
     className: "producer-create-project-button",
     onClick: () => setCreatingProject(true)
   }, "\uFF0B \u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u043E\u0435\u043A\u0442"), React.createElement("button", {
     onClick: () => go("projects")
-  }, "\u0421\u043C\u043E\u0442\u0440\u0435\u0442\u044C \u0432\u0441\u0435 \u2192"))), React.createElement("div", {
-    className: "producer-project-preview-grid"
-  }, result.projects.slice(0, 3).map(project => React.createElement(ProducerProjectCard, {
+  }, "\u0412\u0441\u0435 \u043F\u0440\u043E\u0435\u043A\u0442\u044B \u2192"))), React.createElement("div", {
+    className: "producer-project-preview-rail",
+    ref: projectRail
+  }, result.projects.map(project => React.createElement(ProducerProjectCard, {
     key: project.id,
     project: project,
     go: go
@@ -19133,7 +19179,7 @@ function ProducerProjectsPage(_ref136) {
     className: "producer-page-heading"
   }, React.createElement("div", null, React.createElement("span", {
     className: "producer-eyebrow"
-  }, "\u0412\u0421\u0415 \u041F\u0420\u041E\u0415\u041A\u0422\u042B"), React.createElement("h1", null, "\u041F\u0440\u043E\u0435\u043A\u0442\u044B"), React.createElement("p", null, "\u041E\u0434\u0438\u043D \u0449\u0435\u043B\u0447\u043E\u043A \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0434\u0435\u0442\u0430\u043B\u0438, \u0434\u0432\u043E\u0439\u043D\u043E\u0439 \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442 \u043A\u0430\u0440\u0442\u0443 \u043F\u0440\u043E\u0435\u043A\u0442\u0430.")), React.createElement("span", {
+  }, "\u0412\u0421\u0415 \u041F\u0420\u041E\u0415\u041A\u0422\u042B"), React.createElement("h1", null, "\u041F\u0440\u043E\u0435\u043A\u0442\u044B"), React.createElement("p", null, "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043D\u0430 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0443, \u0447\u0442\u043E\u0431\u044B \u043E\u0442\u043A\u0440\u044B\u0442\u044C \u043A\u0430\u0440\u0442\u0443 \u043F\u0440\u043E\u0435\u043A\u0442\u0430.")), React.createElement("span", {
     className: "producer-directory-actions"
   }, React.createElement("b", null, result.projects.length, " \u0432 \u0440\u0430\u0431\u043E\u0442\u0435"), React.createElement("button", {
     className: "producer-create-project-button",
@@ -19455,6 +19501,10 @@ function ProducerControlGroups(_ref139) {
 function ProducerProjectControlCompact(_ref140) {
   let items = _ref140.items,
     go = _ref140.go;
+  const _useState237 = useState(() => new Set()),
+    _useState238 = _slicedToArray(_useState237, 2),
+    expandedBlocks = _useState238[0],
+    setExpandedBlocks = _useState238[1];
   const blocks = [];
   (items || []).forEach(item => {
     let block = blocks.find(row => row.id === item.blockId);
@@ -19468,19 +19518,33 @@ function ProducerProjectControlCompact(_ref140) {
     }
     block.items.push(item);
   });
+  function toggle(blockId) {
+    setExpandedBlocks(current => {
+      const next = new Set(current);
+      next.has(blockId) ? next.delete(blockId) : next.add(blockId);
+      return next;
+    });
+  }
   return React.createElement("div", {
     className: "producer-project-control-compact"
-  }, blocks.map(block => React.createElement("section", {
-    key: block.id
-  }, React.createElement("header", null, React.createElement("button", {
-    onClick: () => go("block", block.id)
-  }, React.createElement("span", null, "\u0411\u041B\u041E\u041A"), React.createElement("strong", null, block.name)), React.createElement("b", null, block.items.length)), React.createElement("div", null, block.items.map(item => React.createElement("button", {
-    className: `producer-project-control-row ${item.severity} state-${item.state}`,
-    key: item.id,
-    onClick: () => producerOpenControlItem(item, go)
-  }, React.createElement("span", {
-    className: "producer-control-state"
-  }, item.severity === "high" ? "!" : item.kind === "approval" ? "✓" : "•"), React.createElement("span", null, React.createElement("em", null, PRODUCER_CONTROL_LABELS[item.state] || item.reason), React.createElement("strong", null, item.title)), React.createElement("time", null, producerDate(item.deadline), React.createElement("small", null, producerRelativeDue(item.deadline)))))))));
+  }, blocks.map(block => {
+    const expanded = expandedBlocks.has(block.id);
+    const visible = expanded ? block.items : block.items.slice(0, 2);
+    return React.createElement("section", {
+      key: block.id
+    }, React.createElement("header", null, React.createElement("button", {
+      onClick: () => go("block", block.id)
+    }, React.createElement("span", null, "\u0411\u041B\u041E\u041A"), React.createElement("strong", null, block.name)), React.createElement("b", null, block.items.length)), React.createElement("div", null, visible.map(item => React.createElement("button", {
+      className: `producer-project-control-row ${item.severity} state-${item.state}`,
+      key: item.id,
+      onClick: () => producerOpenControlItem(item, go)
+    }, React.createElement("span", {
+      className: "producer-control-state"
+    }, item.severity === "high" ? "!" : item.kind === "approval" ? "✓" : "•"), React.createElement("span", null, React.createElement("em", null, PRODUCER_CONTROL_LABELS[item.state] || item.reason), React.createElement("strong", null, item.title)), React.createElement("time", null, producerDate(item.deadline), React.createElement("small", null, producerRelativeDue(item.deadline))))), block.items.length > 2 && React.createElement("button", {
+      className: "producer-project-control-more",
+      onClick: () => toggle(block.id)
+    }, expanded ? "Свернуть" : `Ещё ${block.items.length - 2}`, " ", expanded ? "↑" : "↓")));
+  }));
 }
 const PRODUCER_MARKETING_LABELS = {
   "no-date": "Нет даты",
@@ -19498,6 +19562,7 @@ function ProducerMilestoneStrip(_ref141) {
   return React.createElement("div", {
     className: "producer-milestone-strip" + (compact ? " compact" : "")
   }, milestones.length ? milestones.map(item => React.createElement("span", {
+    title: `${item.label}: ${producerDate(item.date)}`,
     key: item.key,
     className: item.date && item.date <= new Date().toISOString().slice(0, 10) ? "passed" : ""
   }, React.createElement("i", null), React.createElement("small", null, item.label), React.createElement("b", null, producerDate(item.date)))) : React.createElement("p", null, "\u041A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u0434\u0430\u0442\u044B \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u044B \u0432 \u043F\u043E\u0441\u0442-\u0442\u0440\u0435\u043A\u0435\u0440\u0435."));
@@ -19505,8 +19570,13 @@ function ProducerMilestoneStrip(_ref141) {
 function ProducerPostContext(_ref142) {
   let series = _ref142.series,
     summary = _ref142.summary,
-    go = _ref142.go;
+    go = _ref142.go,
+    onOpenPostGantt = _ref142.onOpenPostGantt;
   if (!(series || []).length) return null;
+  const ganttDay = series.map(item => {
+    var _item$nextMilestone;
+    return ((_item$nextMilestone = item.nextMilestone) === null || _item$nextMilestone === void 0 ? void 0 : _item$nextMilestone.date) || item.editStart;
+  }).filter(Boolean).sort()[0] || null;
   return React.createElement("section", {
     className: "producer-post-context"
   }, React.createElement("header", null, React.createElement("div", null, React.createElement("span", {
@@ -19515,9 +19585,14 @@ function ProducerPostContext(_ref142) {
     className: "producer-post-context-summary"
   }, React.createElement("span", null, React.createElement("b", null, (summary === null || summary === void 0 ? void 0 : summary.inPost) || 0), React.createElement("small", null, "\u0432 \u043F\u043E\u0441\u0442\u0435")), React.createElement("span", {
     className: summary !== null && summary !== void 0 && summary.atRisk ? "risk" : ""
-  }, React.createElement("b", null, (summary === null || summary === void 0 ? void 0 : summary.atRisk) || 0), React.createElement("small", null, "\u0441 \u0440\u0438\u0441\u043A\u043E\u043C")), React.createElement("span", null, React.createElement("b", null, producerDate(summary === null || summary === void 0 ? void 0 : summary.nextAir)), React.createElement("small", null, "\u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0439 \u044D\u0444\u0438\u0440"))), React.createElement("button", {
+  }, React.createElement("b", null, (summary === null || summary === void 0 ? void 0 : summary.atRisk) || 0), React.createElement("small", null, "\u0441 \u0440\u0438\u0441\u043A\u043E\u043C")), React.createElement("span", null, React.createElement("b", null, producerDate(summary === null || summary === void 0 ? void 0 : summary.nextAir)), React.createElement("small", null, "\u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0438\u0439 \u044D\u0444\u0438\u0440"))), React.createElement("div", {
+    className: "producer-post-context-actions"
+  }, React.createElement("button", {
     onClick: () => go("marketing")
-  }, "\u0412\u0441\u044F \u043A\u0430\u0440\u0442\u0438\u043D\u0430 \u2192")), React.createElement("div", {
+  }, "\u0412\u0441\u044F \u043A\u0430\u0440\u0442\u0438\u043D\u0430 \u2192"), onOpenPostGantt && React.createElement("button", {
+    className: "primary",
+    onClick: () => onOpenPostGantt(series[0].projectId, ganttDay)
+  }, "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0433\u0430\u043D\u0442 \u043F\u043E\u0441\u0442\u0430 \u2192"))), React.createElement("div", {
     className: "producer-post-series"
   }, series.slice(0, 4).map(item => {
     var _item$postWork;
@@ -19533,18 +19608,18 @@ function ProducerPostContext(_ref142) {
 function ProducerControlPage(_ref143) {
   let go = _ref143.go,
     refreshKey = _ref143.refreshKey;
-  const _useState237 = useState(null),
-    _useState238 = _slicedToArray(_useState237, 2),
-    result = _useState238[0],
-    setResult = _useState238[1];
-  const _useState239 = useState(""),
+  const _useState239 = useState(null),
     _useState240 = _slicedToArray(_useState239, 2),
-    error = _useState240[0],
-    setError = _useState240[1];
-  const _useState241 = useState("all"),
+    result = _useState240[0],
+    setResult = _useState240[1];
+  const _useState241 = useState(""),
     _useState242 = _slicedToArray(_useState241, 2),
-    filter = _useState242[0],
-    setFilter = _useState242[1];
+    error = _useState242[0],
+    setError = _useState242[1];
+  const _useState243 = useState("all"),
+    _useState244 = _slicedToArray(_useState243, 2),
+    filter = _useState244[0],
+    setFilter = _useState244[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -19625,18 +19700,18 @@ function ProducerControlPage(_ref143) {
 function ProducerMarketingPage(_ref144) {
   let go = _ref144.go,
     refreshKey = _ref144.refreshKey;
-  const _useState243 = useState(null),
-    _useState244 = _slicedToArray(_useState243, 2),
-    result = _useState244[0],
-    setResult = _useState244[1];
-  const _useState245 = useState(""),
+  const _useState245 = useState(null),
     _useState246 = _slicedToArray(_useState245, 2),
-    error = _useState246[0],
-    setError = _useState246[1];
-  const _useState247 = useState("all"),
+    result = _useState246[0],
+    setResult = _useState246[1];
+  const _useState247 = useState(""),
     _useState248 = _slicedToArray(_useState247, 2),
-    filter = _useState248[0],
-    setFilter = _useState248[1];
+    error = _useState248[0],
+    setError = _useState248[1];
+  const _useState249 = useState("all"),
+    _useState250 = _slicedToArray(_useState249, 2),
+    filter = _useState250[0],
+    setFilter = _useState250[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -19723,23 +19798,23 @@ function ProducerTaskPage(_ref145) {
     go = _ref145.go,
     refreshKey = _ref145.refreshKey,
     toast = _ref145.toast;
-  const _useState249 = useState(null),
-    _useState250 = _slicedToArray(_useState249, 2),
-    result = _useState250[0],
-    setResult = _useState250[1];
-  const _useState251 = useState(""),
+  const _useState251 = useState(null),
     _useState252 = _slicedToArray(_useState251, 2),
-    error = _useState252[0],
-    setError = _useState252[1];
-  const _useState253 = useState(false),
+    result = _useState252[0],
+    setResult = _useState252[1];
+  const _useState253 = useState(""),
     _useState254 = _slicedToArray(_useState253, 2),
-    busy = _useState254[0],
-    setBusy = _useState254[1];
+    error = _useState254[0],
+    setError = _useState254[1];
   const _useState255 = useState(false),
     _useState256 = _slicedToArray(_useState255, 2),
-    details = _useState256[0],
-    setDetails = _useState256[1];
-  const _useState257 = useState({
+    busy = _useState256[0],
+    setBusy = _useState256[1];
+  const _useState257 = useState(false),
+    _useState258 = _slicedToArray(_useState257, 2),
+    details = _useState258[0],
+    setDetails = _useState258[1];
+  const _useState259 = useState({
       title: "",
       internalComment: "",
       deadline: "",
@@ -19747,13 +19822,13 @@ function ProducerTaskPage(_ref145) {
       responsiblePersonId: "",
       groupId: ""
     }),
-    _useState258 = _slicedToArray(_useState257, 2),
-    draft = _useState258[0],
-    setDraft = _useState258[1];
-  const _useState259 = useState(0),
     _useState260 = _slicedToArray(_useState259, 2),
-    reload = _useState260[0],
-    setReload = _useState260[1];
+    draft = _useState260[0],
+    setDraft = _useState260[1];
+  const _useState261 = useState(0),
+    _useState262 = _slicedToArray(_useState261, 2),
+    reload = _useState262[0],
+    setReload = _useState262[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -19972,41 +20047,41 @@ function producerAuditValue(value) {
 }
 function ProducerHistoryPage(_ref146) {
   let refreshKey = _ref146.refreshKey;
-  const _useState261 = useState([]),
-    _useState262 = _slicedToArray(_useState261, 2),
-    projects = _useState262[0],
-    setProjects = _useState262[1];
-  const _useState263 = useState({
+  const _useState263 = useState([]),
+    _useState264 = _slicedToArray(_useState263, 2),
+    projects = _useState264[0],
+    setProjects = _useState264[1];
+  const _useState265 = useState({
       projectId: "",
       actorUserId: "",
       action: "",
       from: "",
       to: ""
     }),
-    _useState264 = _slicedToArray(_useState263, 2),
-    filters = _useState264[0],
-    setFilters = _useState264[1];
-  const _useState265 = useState(1),
     _useState266 = _slicedToArray(_useState265, 2),
-    page = _useState266[0],
-    setPage = _useState266[1];
-  const _useState267 = useState({
+    filters = _useState266[0],
+    setFilters = _useState266[1];
+  const _useState267 = useState(1),
+    _useState268 = _slicedToArray(_useState267, 2),
+    page = _useState268[0],
+    setPage = _useState268[1];
+  const _useState269 = useState({
       events: [],
       actors: [],
       total: 0,
       totalPages: 1
     }),
-    _useState268 = _slicedToArray(_useState267, 2),
-    result = _useState268[0],
-    setResult = _useState268[1];
-  const _useState269 = useState(""),
     _useState270 = _slicedToArray(_useState269, 2),
-    error = _useState270[0],
-    setError = _useState270[1];
-  const _useState271 = useState(true),
+    result = _useState270[0],
+    setResult = _useState270[1];
+  const _useState271 = useState(""),
     _useState272 = _slicedToArray(_useState271, 2),
-    loading = _useState272[0],
-    setLoading = _useState272[1];
+    error = _useState272[0],
+    setError = _useState272[1];
+  const _useState273 = useState(true),
+    _useState274 = _slicedToArray(_useState273, 2),
+    loading = _useState274[0],
+    setLoading = _useState274[1];
   useEffect(() => {
     producerRequest("/api/producer/dashboard").then(data => setProjects(data.projects || [])).catch(() => {});
   }, [refreshKey]);
@@ -20198,40 +20273,41 @@ function ProducerProjectMap(_ref153) {
   let projectId = _ref153.projectId,
     people = _ref153.people,
     go = _ref153.go,
-    toast = _ref153.toast;
-  const _useState273 = useState(null),
-    _useState274 = _slicedToArray(_useState273, 2),
-    result = _useState274[0],
-    setResult = _useState274[1];
-  const _useState275 = useState(""),
+    toast = _ref153.toast,
+    onOpenPostGantt = _ref153.onOpenPostGantt;
+  const _useState275 = useState(null),
     _useState276 = _slicedToArray(_useState275, 2),
-    error = _useState276[0],
-    setError = _useState276[1];
-  const _useState277 = useState(false),
+    result = _useState276[0],
+    setResult = _useState276[1];
+  const _useState277 = useState(""),
     _useState278 = _slicedToArray(_useState277, 2),
-    showCreate = _useState278[0],
-    setShowCreate = _useState278[1];
+    error = _useState278[0],
+    setError = _useState278[1];
   const _useState279 = useState(false),
     _useState280 = _slicedToArray(_useState279, 2),
-    saving = _useState280[0],
-    setSaving = _useState280[1];
-  const _useState281 = useState([]),
+    showCreate = _useState280[0],
+    setShowCreate = _useState280[1];
+  const _useState281 = useState(false),
     _useState282 = _slicedToArray(_useState281, 2),
-    projectChoices = _useState282[0],
-    setProjectChoices = _useState282[1];
-  const _useState283 = useState(""),
+    saving = _useState282[0],
+    setSaving = _useState282[1];
+  const _useState283 = useState([]),
     _useState284 = _slicedToArray(_useState283, 2),
-    compareId = _useState284[0],
-    setCompareId = _useState284[1];
-  const _useState285 = useState(null),
+    projectChoices = _useState284[0],
+    setProjectChoices = _useState284[1];
+  const _useState285 = useState(""),
     _useState286 = _slicedToArray(_useState285, 2),
-    compareResult = _useState286[0],
-    setCompareResult = _useState286[1];
-  const _useState287 = useState(false),
+    compareId = _useState286[0],
+    setCompareId = _useState286[1];
+  const _useState287 = useState(null),
     _useState288 = _slicedToArray(_useState287, 2),
-    compareLoading = _useState288[0],
-    setCompareLoading = _useState288[1];
-  const _useState289 = useState({
+    compareResult = _useState288[0],
+    setCompareResult = _useState288[1];
+  const _useState289 = useState(false),
+    _useState290 = _slicedToArray(_useState289, 2),
+    compareLoading = _useState290[0],
+    setCompareLoading = _useState290[1];
+  const _useState291 = useState({
       name: "",
       description: "",
       seriesId: "",
@@ -20240,9 +20316,9 @@ function ProducerProjectMap(_ref153) {
       deadline: "",
       status: "planned"
     }),
-    _useState290 = _slicedToArray(_useState289, 2),
-    form = _useState290[0],
-    setForm = _useState290[1];
+    _useState292 = _slicedToArray(_useState291, 2),
+    form = _useState292[0],
+    setForm = _useState292[1];
   const load = () => producerRequest("/api/producer/projects/" + encodeURIComponent(projectId)).then(setResult).catch(e => setError(e.message));
   useEffect(() => {
     setResult(null);
@@ -20377,7 +20453,8 @@ function ProducerProjectMap(_ref153) {
   })), React.createElement(ProducerPostContext, {
     series: result.series,
     summary: result.postSummary,
-    go: go
+    go: go,
+    onOpenPostGantt: onOpenPostGantt
   }), React.createElement("div", {
     className: "producer-project-board" + (compareResult ? " has-compare" : "")
   }, React.createElement("div", {
@@ -20540,15 +20617,15 @@ function ProducerTaskRow(_ref154) {
     groups = _ref154.groups,
     onChange = _ref154.onChange,
     onOpen = _ref154.onOpen;
-  const _useState291 = useState(false),
-    _useState292 = _slicedToArray(_useState291, 2),
-    busy = _useState292[0],
-    setBusy = _useState292[1];
   const _useState293 = useState(false),
     _useState294 = _slicedToArray(_useState293, 2),
-    editing = _useState294[0],
-    setEditing = _useState294[1];
-  const _useState295 = useState({
+    busy = _useState294[0],
+    setBusy = _useState294[1];
+  const _useState295 = useState(false),
+    _useState296 = _slicedToArray(_useState295, 2),
+    editing = _useState296[0],
+    setEditing = _useState296[1];
+  const _useState297 = useState({
       title: task.title,
       internalComment: task.internalComment || "",
       groupId: task.groupId || "",
@@ -20556,9 +20633,9 @@ function ProducerTaskRow(_ref154) {
       responsiblePersonId: task.responsiblePersonId || "",
       deadline: task.deadline || ""
     }),
-    _useState296 = _slicedToArray(_useState295, 2),
-    draft = _useState296[0],
-    setDraft = _useState296[1];
+    _useState298 = _slicedToArray(_useState297, 2),
+    draft = _useState298[0],
+    setDraft = _useState298[1];
   useEffect(() => {
     if (!editing) setDraft({
       title: task.title,
@@ -20716,26 +20793,26 @@ function ProducerQuickTask(_ref155) {
   let groupId = _ref155.groupId,
     people = _ref155.people,
     onCreate = _ref155.onCreate;
-  const _useState297 = useState(false),
-    _useState298 = _slicedToArray(_useState297, 2),
-    open = _useState298[0],
-    setOpen = _useState298[1];
   const _useState299 = useState(false),
     _useState300 = _slicedToArray(_useState299, 2),
-    busy = _useState300[0],
-    setBusy = _useState300[1];
-  const _useState301 = useState(""),
+    open = _useState300[0],
+    setOpen = _useState300[1];
+  const _useState301 = useState(false),
     _useState302 = _slicedToArray(_useState301, 2),
-    title = _useState302[0],
-    setTitle = _useState302[1];
+    busy = _useState302[0],
+    setBusy = _useState302[1];
   const _useState303 = useState(""),
     _useState304 = _slicedToArray(_useState303, 2),
-    comment = _useState304[0],
-    setComment = _useState304[1];
-  const _useState305 = useState(((_people$2 = people[0]) === null || _people$2 === void 0 ? void 0 : _people$2.id) || ""),
+    title = _useState304[0],
+    setTitle = _useState304[1];
+  const _useState305 = useState(""),
     _useState306 = _slicedToArray(_useState305, 2),
-    assignee = _useState306[0],
-    setAssignee = _useState306[1];
+    comment = _useState306[0],
+    setComment = _useState306[1];
+  const _useState307 = useState(((_people$2 = people[0]) === null || _people$2 === void 0 ? void 0 : _people$2.id) || ""),
+    _useState308 = _slicedToArray(_useState307, 2),
+    assignee = _useState308[0],
+    setAssignee = _useState308[1];
   async function submit(event) {
     event.preventDefault();
     if (!title.trim() || !assignee) return;
@@ -20803,14 +20880,14 @@ function ProducerGroupHeader(_ref156) {
     total = _ref156.total,
     onRename = _ref156.onRename,
     onDelete = _ref156.onDelete;
-  const _useState307 = useState(false),
-    _useState308 = _slicedToArray(_useState307, 2),
-    renaming = _useState308[0],
-    setRenaming = _useState308[1];
-  const _useState309 = useState(group.name),
+  const _useState309 = useState(false),
     _useState310 = _slicedToArray(_useState309, 2),
-    name = _useState310[0],
-    setName = _useState310[1];
+    renaming = _useState310[0],
+    setRenaming = _useState310[1];
+  const _useState311 = useState(group.name),
+    _useState312 = _slicedToArray(_useState311, 2),
+    name = _useState312[0],
+    setName = _useState312[1];
   async function save(event) {
     event.preventDefault();
     if (!name.trim()) return;
@@ -20846,7 +20923,7 @@ function ProducerBlockSettings(_ref157) {
     seriesOptions = _ref157.seriesOptions,
     people = _ref157.people,
     onSave = _ref157.onSave;
-  const _useState311 = useState({
+  const _useState313 = useState({
       name: block.name,
       description: block.description || "",
       seriesId: block.seriesId || "",
@@ -20855,13 +20932,13 @@ function ProducerBlockSettings(_ref157) {
       deadline: block.deadline || "",
       status: block.status
     }),
-    _useState312 = _slicedToArray(_useState311, 2),
-    draft = _useState312[0],
-    setDraft = _useState312[1];
-  const _useState313 = useState(false),
     _useState314 = _slicedToArray(_useState313, 2),
-    busy = _useState314[0],
-    setBusy = _useState314[1];
+    draft = _useState314[0],
+    setDraft = _useState314[1];
+  const _useState315 = useState(false),
+    _useState316 = _slicedToArray(_useState315, 2),
+    busy = _useState316[0],
+    setBusy = _useState316[1];
   useEffect(() => setDraft({
     name: block.name,
     description: block.description || "",
@@ -20980,14 +21057,14 @@ function ProducerApprovalItem(_ref159) {
     tasks = _ref159.tasks,
     canDecide = _ref159.canDecide,
     onDecision = _ref159.onDecision;
-  const _useState315 = useState(approval.decisionComment || ""),
-    _useState316 = _slicedToArray(_useState315, 2),
-    comment = _useState316[0],
-    setComment = _useState316[1];
-  const _useState317 = useState(false),
+  const _useState317 = useState(approval.decisionComment || ""),
     _useState318 = _slicedToArray(_useState317, 2),
-    busy = _useState318[0],
-    setBusy = _useState318[1];
+    comment = _useState318[0],
+    setComment = _useState318[1];
+  const _useState319 = useState(false),
+    _useState320 = _slicedToArray(_useState319, 2),
+    busy = _useState320[0],
+    setBusy = _useState320[1];
   useEffect(() => setComment(approval.status === "pending" ? "" : approval.decisionComment || ""), [approval.status, approval.decisionComment]);
   const linkedTask = tasks.find(task => task.id === approval.taskId);
   const status = approval.status === "pending" ? "pending" : approval.decision;
@@ -21037,23 +21114,23 @@ function ProducerApprovals(_ref160) {
     canDecide = _ref160.canDecide,
     onCreate = _ref160.onCreate,
     onDecision = _ref160.onDecision;
-  const _useState319 = useState(false),
-    _useState320 = _slicedToArray(_useState319, 2),
-    open = _useState320[0],
-    setOpen = _useState320[1];
   const _useState321 = useState(false),
     _useState322 = _slicedToArray(_useState321, 2),
-    busy = _useState322[0],
-    setBusy = _useState322[1];
-  const _useState323 = useState({
+    open = _useState322[0],
+    setOpen = _useState322[1];
+  const _useState323 = useState(false),
+    _useState324 = _slicedToArray(_useState323, 2),
+    busy = _useState324[0],
+    setBusy = _useState324[1];
+  const _useState325 = useState({
       title: "",
       taskId: "",
       dueDate: "",
       required: true
     }),
-    _useState324 = _slicedToArray(_useState323, 2),
-    draft = _useState324[0],
-    setDraft = _useState324[1];
+    _useState326 = _slicedToArray(_useState325, 2),
+    draft = _useState326[0],
+    setDraft = _useState326[1];
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
@@ -21171,22 +21248,22 @@ function ProducerBlockPage(_ref162) {
   let blockId = _ref162.blockId,
     go = _ref162.go,
     toast = _ref162.toast;
-  const _useState325 = useState(null),
-    _useState326 = _slicedToArray(_useState325, 2),
-    result = _useState326[0],
-    setResult = _useState326[1];
-  const _useState327 = useState(""),
+  const _useState327 = useState(null),
     _useState328 = _slicedToArray(_useState327, 2),
-    error = _useState328[0],
-    setError = _useState328[1];
+    result = _useState328[0],
+    setResult = _useState328[1];
   const _useState329 = useState(""),
     _useState330 = _slicedToArray(_useState329, 2),
-    groupName = _useState330[0],
-    setGroupName = _useState330[1];
-  const _useState331 = useState(false),
+    error = _useState330[0],
+    setError = _useState330[1];
+  const _useState331 = useState(""),
     _useState332 = _slicedToArray(_useState331, 2),
-    saving = _useState332[0],
-    setSaving = _useState332[1];
+    groupName = _useState332[0],
+    setGroupName = _useState332[1];
+  const _useState333 = useState(false),
+    _useState334 = _slicedToArray(_useState333, 2),
+    saving = _useState334[0],
+    setSaving = _useState334[1];
   const load = () => producerRequest("/api/producer/blocks/" + encodeURIComponent(blockId)).then(data => {
     setResult(data);
     setError("");
@@ -21511,22 +21588,22 @@ function ProducerCurrentItem(_ref164) {
 function ProducerTeamPage(_ref165) {
   let go = _ref165.go,
     refreshKey = _ref165.refreshKey;
-  const _useState333 = useState(null),
-    _useState334 = _slicedToArray(_useState333, 2),
-    result = _useState334[0],
-    setResult = _useState334[1];
-  const _useState335 = useState(""),
+  const _useState335 = useState(null),
     _useState336 = _slicedToArray(_useState335, 2),
-    error = _useState336[0],
-    setError = _useState336[1];
+    result = _useState336[0],
+    setResult = _useState336[1];
   const _useState337 = useState(""),
     _useState338 = _slicedToArray(_useState337, 2),
-    search = _useState338[0],
-    setSearch = _useState338[1];
+    error = _useState338[0],
+    setError = _useState338[1];
   const _useState339 = useState(""),
     _useState340 = _slicedToArray(_useState339, 2),
-    expandedPerson = _useState340[0],
-    setExpandedPerson = _useState340[1];
+    search = _useState340[0],
+    setSearch = _useState340[1];
+  const _useState341 = useState(""),
+    _useState342 = _slicedToArray(_useState341, 2),
+    expandedPerson = _useState342[0],
+    setExpandedPerson = _useState342[1];
   useEffect(() => {
     let alive = true;
     producerRequest("/api/producer/team").then(data => alive && setResult(data)).catch(e => alive && setError(e.message));
@@ -21610,23 +21687,23 @@ function ProducerProfileEditor(_ref166) {
   let person = _ref166.person,
     onSaved = _ref166.onSaved,
     onCancel = _ref166.onCancel;
-  const _useState341 = useState({
+  const _useState343 = useState({
       headline: person.headline || "",
       achievements: (person.achievements || []).map(item => ({
         ...item
       }))
     }),
-    _useState342 = _slicedToArray(_useState341, 2),
-    draft = _useState342[0],
-    setDraft = _useState342[1];
-  const _useState343 = useState(false),
     _useState344 = _slicedToArray(_useState343, 2),
-    busy = _useState344[0],
-    setBusy = _useState344[1];
-  const _useState345 = useState(""),
+    draft = _useState344[0],
+    setDraft = _useState344[1];
+  const _useState345 = useState(false),
     _useState346 = _slicedToArray(_useState345, 2),
-    error = _useState346[0],
-    setError = _useState346[1];
+    busy = _useState346[0],
+    setBusy = _useState346[1];
+  const _useState347 = useState(""),
+    _useState348 = _slicedToArray(_useState347, 2),
+    error = _useState348[0],
+    setError = _useState348[1];
   function change(index, key, value) {
     setDraft(current => ({
       ...current,
@@ -21723,22 +21800,22 @@ function ProducerPersonPage(_ref167) {
     go = _ref167.go,
     refreshKey = _ref167.refreshKey,
     toast = _ref167.toast;
-  const _useState347 = useState(null),
-    _useState348 = _slicedToArray(_useState347, 2),
-    person = _useState348[0],
-    setPerson = _useState348[1];
-  const _useState349 = useState(""),
+  const _useState349 = useState(null),
     _useState350 = _slicedToArray(_useState349, 2),
-    error = _useState350[0],
-    setError = _useState350[1];
-  const _useState351 = useState(false),
+    person = _useState350[0],
+    setPerson = _useState350[1];
+  const _useState351 = useState(""),
     _useState352 = _slicedToArray(_useState351, 2),
-    editing = _useState352[0],
-    setEditing = _useState352[1];
-  const _useState353 = useState(0),
+    error = _useState352[0],
+    setError = _useState352[1];
+  const _useState353 = useState(false),
     _useState354 = _slicedToArray(_useState353, 2),
-    reload = _useState354[0],
-    setReload = _useState354[1];
+    editing = _useState354[0],
+    setEditing = _useState354[1];
+  const _useState355 = useState(0),
+    _useState356 = _slicedToArray(_useState355, 2),
+    reload = _useState356[0],
+    setReload = _useState356[1];
   useEffect(() => {
     let alive = true;
     setError("");
@@ -21821,14 +21898,14 @@ function ProducerPersonPage(_ref167) {
 function ProducerAnalyticsPage(_ref168) {
   let go = _ref168.go,
     refreshKey = _ref168.refreshKey;
-  const _useState355 = useState(null),
-    _useState356 = _slicedToArray(_useState355, 2),
-    result = _useState356[0],
-    setResult = _useState356[1];
-  const _useState357 = useState(""),
+  const _useState357 = useState(null),
     _useState358 = _slicedToArray(_useState357, 2),
-    error = _useState358[0],
-    setError = _useState358[1];
+    result = _useState358[0],
+    setResult = _useState358[1];
+  const _useState359 = useState(""),
+    _useState360 = _slicedToArray(_useState359, 2),
+    error = _useState360[0],
+    setError = _useState360[1];
   useEffect(() => {
     let alive = true;
     producerRequest("/api/producer/analytics").then(data => alive && setResult(data)).catch(e => alive && setError(e.message));
@@ -21886,19 +21963,20 @@ function ProducerAnalyticsPage(_ref168) {
 function ProducerWorkspace(_ref169) {
   let user = _ref169.user,
     data = _ref169.data,
-    onExit = _ref169.onExit;
-  const _useState359 = useState(() => producerInitialScreen()),
-    _useState360 = _slicedToArray(_useState359, 2),
-    screen = _useState360[0],
-    setScreen = _useState360[1];
-  const _useState361 = useState(""),
+    onExit = _ref169.onExit,
+    onOpenPostGantt = _ref169.onOpenPostGantt;
+  const _useState361 = useState(() => producerInitialScreen()),
     _useState362 = _slicedToArray(_useState361, 2),
-    toastMessage = _useState362[0],
-    setToastMessage = _useState362[1];
-  const _useState363 = useState(0),
+    screen = _useState362[0],
+    setScreen = _useState362[1];
+  const _useState363 = useState(""),
     _useState364 = _slicedToArray(_useState363, 2),
-    refreshKey = _useState364[0],
-    setRefreshKey = _useState364[1];
+    toastMessage = _useState364[0],
+    setToastMessage = _useState364[1];
+  const _useState365 = useState(0),
+    _useState366 = _slicedToArray(_useState365, 2),
+    refreshKey = _useState366[0],
+    setRefreshKey = _useState366[1];
   useEffect(() => {
     const update = () => setScreen(producerInitialScreen());
     window.addEventListener("hashchange", update);
@@ -21959,7 +22037,8 @@ function ProducerWorkspace(_ref169) {
     projectId: screen.id,
     people: data.people || [],
     go: go,
-    toast: toast
+    toast: toast,
+    onOpenPostGantt: onOpenPostGantt
   }), screen.type === "block" && React.createElement(ProducerBlockPage, {
     blockId: screen.id,
     go: go,
@@ -21980,51 +22059,51 @@ function ProducerWorkspace(_ref169) {
 }
 function App() {
   var _data$projects$find2, _saveQueueRef$current5;
-  const _useState365 = useState(null),
-    _useState366 = _slicedToArray(_useState365, 2),
-    rawData = _useState366[0],
-    setRawData = _useState366[1];
-  const _useState367 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
+  const _useState367 = useState(null),
     _useState368 = _slicedToArray(_useState367, 2),
-    workspace = _useState368[0],
-    setWorkspace = _useState368[1];
-  const _useState369 = useState("today"),
+    rawData = _useState368[0],
+    setRawData = _useState368[1];
+  const _useState369 = useState(() => String(window.location.hash || "").startsWith("#producer") ? "producer" : "post"),
     _useState370 = _slicedToArray(_useState369, 2),
-    view = _useState370[0],
-    setView = _useState370[1];
-  const _useState371 = useState(() => parseHash()),
+    workspace = _useState370[0],
+    setWorkspace = _useState370[1];
+  const _useState371 = useState("today"),
     _useState372 = _slicedToArray(_useState371, 2),
-    navState = _useState372[0],
-    setNavState = _useState372[1];
-  const _useState373 = useState("ok"),
+    view = _useState372[0],
+    setView = _useState372[1];
+  const _useState373 = useState(() => parseHash()),
     _useState374 = _slicedToArray(_useState373, 2),
-    syncState = _useState374[0],
-    setSyncState = _useState374[1];
-  const _useState375 = useState(""),
+    navState = _useState374[0],
+    setNavState = _useState374[1];
+  const _useState375 = useState("ok"),
     _useState376 = _slicedToArray(_useState375, 2),
-    syncError = _useState376[0],
-    setSyncError = _useState376[1];
-  const _useState377 = useState(false),
+    syncState = _useState376[0],
+    setSyncState = _useState376[1];
+  const _useState377 = useState(""),
     _useState378 = _slicedToArray(_useState377, 2),
-    dayShiftsModal = _useState378[0],
-    setDayShiftsModal = _useState378[1];
-  const _useState379 = useState(null),
+    syncError = _useState378[0],
+    setSyncError = _useState378[1];
+  const _useState379 = useState(false),
     _useState380 = _slicedToArray(_useState379, 2),
-    ganttDay = _useState380[0],
-    setGanttDay = _useState380[1];
-  const _useState381 = useState(false),
+    dayShiftsModal = _useState380[0],
+    setDayShiftsModal = _useState380[1];
+  const _useState381 = useState(null),
     _useState382 = _slicedToArray(_useState381, 2),
-    cmdPaletteOpen = _useState382[0],
-    setCmdPaletteOpen = _useState382[1];
-  const isMobile = useIsMobile(760);
-  const _useState383 = useState(null),
+    ganttDay = _useState382[0],
+    setGanttDay = _useState382[1];
+  const _useState383 = useState(false),
     _useState384 = _slicedToArray(_useState383, 2),
-    user = _useState384[0],
-    setUser = _useState384[1];
+    cmdPaletteOpen = _useState384[0],
+    setCmdPaletteOpen = _useState384[1];
+  const isMobile = useIsMobile(760);
   const _useState385 = useState(null),
     _useState386 = _slicedToArray(_useState385, 2),
-    loginError = _useState386[0],
-    setLoginError = _useState386[1];
+    user = _useState386[0],
+    setUser = _useState386[1];
+  const _useState387 = useState(null),
+    _useState388 = _slicedToArray(_useState387, 2),
+    loginError = _useState388[0],
+    setLoginError = _useState388[1];
   const saveTimer = useRef(null);
   const clientIdRef = useRef(Math.random().toString(36).slice(2));
   const saveQueueRef = useRef(null);
@@ -22675,6 +22754,14 @@ function App() {
       user: user,
       data: data,
       onExit: () => {
+        setWorkspace("post");
+        history.pushState(null, "", location.pathname + location.search);
+        setNavState(null);
+      },
+      onOpenPostGantt: (projectId, day) => {
+        if (projectId) sessionStorage.setItem("ganttFocusProject", projectId);
+        setGanttDay(day || null);
+        setView("gantt");
         setWorkspace("post");
         history.pushState(null, "", location.pathname + location.search);
         setNavState(null);
